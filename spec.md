@@ -1,6 +1,6 @@
 # Datasette chart suggestions: specification
 
-- **Status:** Draft 2
+- **Status:** Draft 3
 - **Date:** 2026-11-22
 - **Working name:** `datasette-charts` (placeholder; not yet checked against existing plugin names)
 - **Datasette baseline:** commit `56e02c1` (2026-11-22, after 1.0a43, unreleased). File and line references in this document are to that commit. The plugin needs this commit or later (section 15.1).
@@ -42,7 +42,7 @@ Profiling is shared and runs once per source. Each chart type bundles its own he
 - Saved charts, dashboards and embedding. These have not been discussed yet.
 - Interactive re-suggestion. Suggestions are produced once per source; refinement is manual.
 - Solving expensive arbitrary queries, for example by materializing them. We will deal with that when it happens.
-- Implementing date and timestamp detection. This spec assumes that system exists (section 7.5).
+- Reading dates in formats that SQLite's date functions cannot parse, such as `11/22/2026` or `22 Nov 2026` (section 7.5).
 
 ## 3. Decisions so far
 
@@ -64,7 +64,7 @@ These were settled in discussion. Everything else in this document is a proposal
 | D12 | Default chart set | Histogram, category bar, time-series line, scatter or binned heatmap, map, and grouped or stacked bar. |
 | D13 | Reasons | Each suggestion carries a plain-English reason, shown to the user. |
 | D14 | Staleness | A stored profile goes stale after a time limit, or when the row count changes by more than a set percentage. |
-| D15 | Temporal detection | Assume a separate system reports likely date and timestamp columns. |
+| D15 | Temporal detection | The plugin detects date and timestamp columns itself (section 7.5). Revised in Draft 3: earlier drafts assumed a separate system would report them. |
 
 Two questions were explicitly left open for prototyping: the profiling budget, and how to rank across chart types. Sections 7.3 and 10.3 propose starting points for each.
 
@@ -156,7 +156,7 @@ Per column:
 - numeric: min, max, mean
 - text: min, max and mean length
 - top values with counts, for columns with low distinct counts
-- temporal: format, earliest and latest value (from the temporal detector, section 7.5)
+- temporal: kind, match rate, earliest and latest value, and whether values carry a UTC offset (section 7.5)
 - the Datasette column type, if one is assigned
 - role, secondary roles and the evidence for them
 
@@ -171,7 +171,7 @@ Illustrative shape:
     {
       "name": "created_at",
       "role": "temporal",
-      "temporal": {"format": "iso_datetime", "min": "2023-11-02", "max": "2026-11-20"},
+      "temporal": {"kind": "iso_datetime", "match_rate": 1.0, "min": "2023-11-02 08:14:00", "max": "2026-11-20 17:02:41", "has_offset": false, "origin": "detected"},
       "null_rate": 0.0,
       "distinct": {"count": 1000, "capped": true}
     },
@@ -192,7 +192,7 @@ Each column gets one primary role and may get secondary roles. A `year` integer 
 
 | Role | Meaning | Typical evidence |
 |------|---------|------------------|
-| `temporal` | Date, datetime, Unix timestamp or year | Temporal detector, assigned column type |
+| `temporal` | Date, datetime, Unix timestamp or year | Value patterns, with name and declared-type hints for numeric columns (section 7.5); configuration; assigned column type |
 | `measure` | Numeric quantity worth aggregating | Numeric storage, many distinct values, not an identifier |
 | `category` | Small set of repeated values | Low distinct count relative to rows |
 | `boolean` | Two values | 0/1, true/false, yes/no |
@@ -204,6 +204,8 @@ Each column gets one primary role and may get secondary roles. A `year` integer 
 | `blob` | Binary data | Storage type |
 | `constant` | One distinct value | Nothing to chart |
 | `unknown` | None of the above | |
+
+`temporal` takes precedence over `identifier`: a `created_at` column that happens to be unique is still a time axis. `constant` takes precedence over `temporal`.
 
 Role assignment is deterministic and rule-based. The rules, thresholds and name patterns live in one module so the eval harness (section 17) can track changes to them.
 
@@ -278,24 +280,132 @@ select t.* from probes join "orders" t on t.rowid = probes.r
 
 Queries and views cannot be chunked. Their full profile is one aggregate query under the extended time limit (section 15.1). If it times out, the sample-tier profile stays in place and the stored profile records that the full tier was not reached.
 
-### 7.5 Temporal detection (assumed input)
+### 7.5 Temporal detection
 
-This spec assumes a separate system reports likely date and timestamp columns (D15). The profiler needs this interface from it:
+The profiler detects date and timestamp columns itself (D15). Detection is part of the profile, so it works the same way for tables, views and queries: it reads values through the `source` CTE and needs nothing from the schema.
 
-```python
-async def detect_temporal_columns(datasette, source) -> dict[str, TemporalInfo]: ...
+**Kinds.** A temporal column has one kind, which records how its values are encoded:
 
-@dataclass
-class TemporalInfo:
-    kind: str          # "date" | "datetime" | "unix_seconds" | "unix_ms" | "year"
-    confidence: float  # 0 to 1
+| Kind | Stored as | Example | Needs a hint |
+|------|-----------|---------|--------------|
+| `iso_date` | Text, `YYYY-MM-DD` | `2026-11-22` | No |
+| `iso_datetime` | Text, ISO 8601 date and time, with `T` or a space, optional fractional seconds, optional `Z` or `+HH:MM` offset | `2026-11-22T10:30:15Z` | No |
+| `unix_seconds` | Integer or real, seconds since 1970 | `1700000000` | Yes |
+| `unix_ms` | Integer or real, milliseconds since 1970 | `1700000000123` | Yes |
+| `year` | Integer | `2026` | Yes: a name hint |
+
+These are the encodings SQLite's own date functions can read, so every kind can be bucketed in SQL without loading rows into Python. A column that mixes `iso_date` and `iso_datetime` values is treated as `iso_datetime`.
+
+**Evidence.** Detection combines three kinds of evidence:
+
+1. **Values.** The share of present values (not null and not an empty string) that pass the kind's value test. This is the only evidence that is required.
+2. **Name hints.** Names such as `date`, `time`, `timestamp`, `ts`, `created`, `updated`, `modified`, `dob`, and the suffixes `_at`, `_on`, `_date`, `_time`. For `year`: `year`, `yr` and the suffix `_year`.
+3. **Declared type hints.** A declared type containing `DATE` or `TIME`. Only table columns have one.
+
+Text in ISO format is specific enough to be trusted on values alone. Numbers are not: an integer between 1,000 and 2,200 could be a year or an elevation, and an integer near 1.7 billion could be a timestamp or a population. Numeric kinds therefore need a hint as well as matching values.
+
+**Rules.** A column is temporal when:
+
+- at least `temporal_min_match_rate` (default 0.95) of its present values pass one kind's value test, and
+- for the numeric kinds, the column has a name hint or a declared type hint.
+
+The value tests:
+
+| Kind | Value test |
+|------|------------|
+| `iso_date` | Text that matches the shape `YYYY-MM-DD` exactly, and that `julianday()` can parse |
+| `iso_datetime` | Text that starts with the shape `YYYY-MM-DD`, then `T` or a space, then `HH:MM`, and that `julianday()` can parse |
+| `unix_seconds` | Number from 315532800 to 4102444800 (1980-01-01 to 2100-01-01) |
+| `unix_ms` | Number from 315532800000 to 4102444800000 (the same window in milliseconds) |
+| `year` | Integer from 1000 to 2200 |
+
+The seconds and milliseconds windows do not overlap, so the two kinds cannot be confused. The shape test is needed as well as `julianday()` because `julianday()` on its own accepts strings such as `'2026'`, `'12:00'` and `'now'`.
+
+Columns that match on values but lack the required hint are not given the temporal role. The profile records them as `"temporal_candidate"` with their kind, so the manual builder can offer them as a time axis (goal 7).
+
+**SQL.** The value tests are extra expressions in the one-scan query from section 7.4:
+
+```sql
+with source as (select * from "orders")
+select
+  sum("created_at" is not null and "created_at" != '') as created_at__n_present,
+  sum(typeof("created_at") = 'text'
+      and "created_at" glob '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'
+      and julianday("created_at") is not null) as created_at__n_iso_date,
+  sum(typeof("created_at") = 'text'
+      and "created_at" glob '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9][T ][0-2][0-9]:[0-5][0-9]*'
+      and julianday("created_at") is not null) as created_at__n_iso_datetime,
+  sum(typeof("created_at") in ('integer', 'real')
+      and "created_at" between 315532800 and 4102444800) as created_at__n_unix_seconds,
+  sum(typeof("created_at") in ('integer', 'real')
+      and "created_at" between 315532800000 and 4102444800000) as created_at__n_unix_ms,
+  sum(typeof("created_at") = 'integer'
+      and "created_at" between 1000 and 2200) as created_at__n_year
+  -- ...repeated for each column
+from source
 ```
 
-Notes:
+Once a column has a kind, a second query gets its range. For the text kinds this goes through `julianday()`, so values with different offsets compare correctly:
 
-- `kind` determines the SQL expression chart types use to bucket the column, for example `strftime('%Y-%m', col)` versus `strftime('%Y-%m', col, 'unixepoch')`.
-- Datasette's column type system is a natural place for users to confirm or correct detections on tables. Core has a `column_types` table and a `register_column_types` hook, but its built-in types are only `url`, `email`, `json` and `textarea`; there are no date types and no automatic detection. An assigned column type should override detection.
-- Query sources have no table to attach column types to, so detection for them has to work from names and values.
+```sql
+with source as (select * from "orders")
+select
+  datetime(min(julianday("created_at"))) as earliest,
+  datetime(max(julianday("created_at"))) as latest,
+  sum("created_at" glob '*[0-9]Z'
+      or "created_at" glob '*[+-][0-9][0-9]:[0-9][0-9]') as n_with_offset
+from source
+where typeof("created_at") = 'text'
+  and "created_at" glob '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]*'
+  and julianday("created_at") is not null
+```
+
+For the numeric kinds the range is the `min` and `max` the one-scan query already collects.
+
+**Tiers.** Hints come from tier 0. The sample tier runs the value tests on every column of the sample and assigns kinds. The full tier runs the value tests only on columns the sample tier flagged, because parsing every text value of every column across a large table is wasted work. The full tier then replaces the match rate and range with exact figures. If the exact match rate falls below the threshold, the column loses its temporal role.
+
+**Interface.** The profile carries the result per column:
+
+```python
+@dataclass
+class TemporalInfo:
+    kind: str            # "iso_date" | "iso_datetime" | "unix_seconds" | "unix_ms" | "year"
+    match_rate: float    # share of present values that pass the value test
+    min: str             # earliest value, as ISO 8601 text
+    max: str             # latest value, as ISO 8601 text
+    has_offset: bool     # any value carries "Z" or a UTC offset
+    origin: str          # "detected" | "config" | "column_type"
+```
+
+Chart types do not build date SQL themselves. The library provides one helper that turns a column, its kind and a time unit into a bucketing expression:
+
+| Kind | Month bucket |
+|------|--------------|
+| `iso_date`, `iso_datetime` | `strftime('%Y-%m', col)` |
+| `unix_seconds` | `strftime('%Y-%m', col, 'unixepoch')` |
+| `unix_ms` | `strftime('%Y-%m', col / 1000, 'unixepoch')` |
+| `year` | `cast(col as integer)`; only the `year` unit is available |
+
+`strftime()` returns `NULL` for a value it cannot parse. Chart queries drop the `NULL` bucket, so the few values that fail the value test are left out of the chart and do not break it.
+
+**Overrides.** Detection will sometimes be wrong, in both directions. Two things override it:
+
+- Plugin configuration at the table level sets a kind for a column, or `false` to say a column is not temporal (section 16). This is how a timestamp column with an unhelpful name, or with values outside the window, gets a time axis.
+- An assigned Datasette column type that declares itself temporal. Core has a `column_types` table and a `register_column_types` hook, but its built-in types are only `url`, `email`, `json` and `textarea`, so this needs date types to exist first (section 15.2).
+
+Query sources have no table to attach configuration or column types to. For them detection stands as it is, and the manual builder is the way to correct it.
+
+**Time zones.** Values with an offset are converted to UTC by SQLite's date functions. Values without one are used as stored. Buckets are therefore in UTC for the first group and in whatever zone the data was written in for the second. The first version does no further conversion; `has_offset` is recorded so the UI can label the axis.
+
+**Not detected in the first version:**
+
+- Text dates in other formats: `11/22/2026`, `22 Nov 2026`, RFC 2822, `20261122`, and offsets written without a colon (`-0800`). SQLite's date functions return `NULL` for all of these.
+- Year and month without a day (`2026-11`).
+- Numbers stored as text, which is common in CSV imports made without type detection.
+- Unix timestamps in microseconds or nanoseconds, and Julian day numbers.
+- Timestamps outside the 1980 to 2100 window, unless configured.
+
+**Prior art in core.** Core has two narrower date checks. `DateFacet.suggest()` looks for values matching `????-??-*` in the first 100 rows. The Column statistics dialog counts values matching an ISO date pattern and draws a date histogram when more than half match. Neither handles numeric timestamps.
 
 ### 7.6 Storage
 
@@ -686,7 +796,7 @@ order by min(rn, :limit + 1)
 
 `is_other` is a separate column so that a real `NULL` category stays distinguishable from the "Other" bucket.
 
-**Time buckets** (time-series line). The time unit is chosen from the temporal span so the bucket count stays in the low hundreds:
+**Time buckets** (time-series line). The time unit is chosen from the temporal span so the bucket count stays in the low hundreds. The bucketing expression depends on the column's temporal kind (section 7.5); this example is for an `iso_datetime` column:
 
 ```sql
 with source as (select * from "orders")
@@ -694,13 +804,13 @@ select
   strftime('%Y-%m', "created_at") as bucket,
   count(*) as value
 from source
-where "created_at" is not null
 group by 1
+having bucket is not null
 order by 1
 limit 501
 ```
 
-Missing buckets are filled in by the renderer so gaps show as zero and are not skipped.
+The `having` clause drops nulls and any values that cannot be parsed as dates. Missing buckets are filled in by the renderer so gaps show as zero and are not skipped.
 
 **Top K series over time** (multi-series line, grouped and stacked bar):
 
@@ -885,7 +995,7 @@ What this means for the plugin:
 |--------|-----|
 | A way to mark a longer-than-default timeout as expected | Full-tier profiling timeouts are part of the design but are recorded as span errors (section 15.1) |
 | Document `datasette.capped_time_limit_ms()` | The plugin relies on it to cap its short time limits (section 15.1) |
-| Date and datetime column types | A home for temporal detection results that users can correct (section 7.5) |
+| Date and datetime column types | A place in the Datasette UI for users to confirm or correct detected temporal columns, in place of plugin configuration (section 7.5) |
 | A dedicated SQL thread or executor for background work | A long profile query currently occupies one of the three request threads |
 | Pruning of finished background task handles | Not needed by this design (one long-lived worker), but would allow simpler per-job tasks |
 | Documentation fix | `docs/internals.rst` says the default internal database is "temporary in-memory"; the code creates a temporary file on disk (`datasette/app.py:540`) |
@@ -908,16 +1018,31 @@ plugins:
     chunk_rows: 250000
     stale_after_hours: 24
     stale_row_change: 0.10
+    temporal_min_match_rate: 0.95     # share of present values that must look like dates
     thumbnail_row_limit: 100000       # above this, previews are on demand
     thumbnail_concurrency: 2
     hard_max_rows: 5000
+```
+
+Temporal detection can be overridden for a column in table-level plugin configuration (section 7.5):
+
+```yaml
+databases:
+  shop:
+    tables:
+      orders:
+        plugins:
+          datasette-charts:
+            temporal:
+              shipped: unix_seconds     # force a kind
+              build_number: false       # never treat as temporal
 ```
 
 ## 17. Evaluation harness
 
 The two open questions, profiling budget and cross-type ranking, will be answered by experiment. The harness exists to make those experiments cheap and their results reviewable.
 
-1. **Corpus.** A set of real SQLite databases covering different shapes: time-series logs, transactional tables, survey data, geographic data, wide tables with dozens of columns, and messy imports.
+1. **Corpus.** A set of real SQLite databases covering different shapes: time-series logs, transactional tables, survey data, geographic data, wide tables with dozens of columns, and messy imports. The corpus includes every temporal kind from section 7.5, along with columns that look temporal but are not, and each column is labelled so detection errors in either direction are counted.
 2. **Snapshot tests.** For each table in the corpus, the top suggestions (spec, score, reason) are stored as a snapshot file. A change to any heuristic shows up as a diff across the whole corpus in code review.
 3. **CLI.** `datasette charts suggest data.db orders` prints suggestions and the signals behind each score, registered with `register_commands`. `datasette charts profile data.db orders` prints the profile.
 4. **Contact sheet.** A generated HTML page that renders the top suggestions for every table in the corpus, for judging quality by eye.
@@ -929,7 +1054,7 @@ The two open questions, profiling budget and cross-type ranking, will be answere
 | Milestone | Contents |
 |-----------|----------|
 | M0 | Core change: `execute()` time limit (section 15.1). Done in `56e02c1`; remaining work is to pin the minimum Datasette version once it is released |
-| M1 | `Source`; tier 0 and tier 1 profiler; `register_chart_types`; DSL validation; three chart types (histogram, category bar, time-series line); `data.json` and `suggest.json`; suggestions strip; CLI and snapshot harness |
+| M1 | `Source`; tier 0 and tier 1 profiler, including temporal detection (section 7.5); `register_chart_types`; DSL validation; three chart types (histogram, category bar, time-series line); `data.json` and `suggest.json`; suggestions strip; CLI and snapshot harness |
 | M2 | Remaining default chart types (scatter and heatmap, grouped and stacked bar, map); manual builder; thumbnails with on-demand previews |
 | M3 | Full tier; internal database tables; background worker; staleness; profile status in the UI |
 | M4 | Documentation for chart type authors; DSL v1 frozen; tuning from the eval harness |
@@ -949,8 +1074,11 @@ M1 is deliberately the thinnest slice that exercises every interface: three char
 9. **Staleness thresholds.** Are 24 hours and 10% right? Should they scale with table size?
 10. **Pairwise facts.** Should correlations between measure pairs be part of the full profile, or stay in the scatter chart's `verify` step?
 11. **Column statistics overlap.** Should the profiler and core's Column statistics dialog share SQL or stored results?
-12. **Names.** The plugin name, the internal table prefix and the new `execute()` argument.
+12. **Names.** The plugin name and the internal table prefix.
 13. **Stored query parameters.** How suggestions work for stored queries that take named parameters.
+14. **Temporal detection thresholds.** Are a 0.95 match rate, the 1980 to 2100 window and the name hint list right? How often does the hint requirement miss real timestamp columns, and how often would dropping it produce false time axes?
+15. **Other date formats.** Formats SQLite cannot parse would need Python-side parsing of the sample for detection and a SQL rewrite of each value for bucketing. Is any format common enough to justify that?
+16. **Time zones.** Should charts offer a display time zone, and what should happen to columns that mix values with and without offsets?
 
 ## Appendix A: Datasette facts this spec relies on
 
@@ -977,6 +1105,9 @@ Checked against commit `56e02c1`.
 | `datasette.allowed(action=, resource=, actor=)`; `TableResource`, `DatabaseResource`, `QueryResource` | `datasette/app.py:2128`, `datasette/resources.py` |
 | Actions `view-table`, `execute-sql`, `view-query` | `datasette/default_actions.py` |
 | Column statistics dialog, added in 1.0a42 | `datasette/static/column-stats.js` |
+| Column statistics counts ISO-date-like values and draws a date histogram when more than half match | `datasette/static/column-stats.js:20`, `:317`, `:1844` |
+| `DateFacet.suggest()` checks the first 100 rows for `????-??-*` | `datasette/facets.py:522-527` |
+| SQLite date function behaviour described in section 7.5 (accepted formats, `NULL` for others, offsets converted to UTC) | Run against SQLite 3.53.1 |
 
 ## Appendix B: Prior art
 

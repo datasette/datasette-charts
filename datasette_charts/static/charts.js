@@ -98,6 +98,24 @@ function errorMessage(result) {
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+// Storage can be unavailable or full. Nothing here depends on it working.
+function recall(storageName, key) {
+  try {
+    return window[storageName].getItem(key);
+  } catch (e) {
+    return null;
+  }
+}
+
+function remember(storageName, key, value) {
+  try {
+    if (value === null) window[storageName].removeItem(key);
+    else window[storageName].setItem(key, value);
+  } catch (e) {
+    // Not being able to remember is fine
+  }
+}
 const count = (n, noun) => `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 
 // --- The panel ----------------------------------------------------------------
@@ -120,30 +138,29 @@ class ChartsPanel {
   }
 
   build() {
-    let stored = null;
-    try {
-      stored = localStorage.getItem(COLLAPSED_KEY);
-    } catch (e) {
-      // Storage can be unavailable; fall back to the configured default
-    }
-    const wantsChart = location.hash.startsWith(FRAGMENT) || location.hash === `#${this.root.id}`;
-    const open = wantsChart || (stored === null ? this.bootstrap.auto_suggest : stored !== "1");
+    const stored = recall("localStorage", COLLAPSED_KEY);
+    // Arriving on a link to a chart, or to the panel itself, opens the panel
+    const linked = location.hash.startsWith(FRAGMENT) || location.hash === `#${this.root.id}`;
+    const open = linked || (stored === null ? this.bootstrap.auto_suggest : stored !== "1");
+    // Stay open with nothing suggested only if the person asked for the panel
+    this.keepOpen = location.hash === `#${this.root.id}`;
 
     this.status = h("span", { class: "dc-status" });
     this.strip = h("div", { class: "dc-strip" });
     this.view = h("div", { class: "dc-view", hidden: true });
-    this.panel = h(
-      "details",
-      { class: "dc-panel", open },
-      h("summary", {}, h("span", { class: "dc-heading" }, "Charts"), this.status),
-      this.strip,
-      this.view
-    );
+    const summary = h("summary", {}, h("span", { class: "dc-heading" }, "Charts"), this.status);
+    this.panel = h("details", { class: "dc-panel", open }, summary, this.strip, this.view);
+    // Only a click or key press on the summary is the person's own choice.
+    // The panel also opens and closes itself, and that is not remembered.
+    let byUser = false;
+    summary.addEventListener("click", () => {
+      byUser = true;
+    });
     this.panel.addEventListener("toggle", () => {
-      try {
-        localStorage.setItem(COLLAPSED_KEY, this.panel.open ? "0" : "1");
-      } catch (e) {
-        // Not being able to remember the choice is fine
+      if (byUser) {
+        byUser = false;
+        remember("localStorage", COLLAPSED_KEY, this.panel.open ? "0" : "1");
+        if (this.panel.open) this.keepOpen = true;
       }
       if (this.panel.open) this.load();
     });
@@ -152,6 +169,7 @@ class ChartsPanel {
     // "Chart this data" in the actions menu links to the panel
     window.addEventListener("hashchange", () => {
       if (location.hash === `#${this.root.id}`) {
+        this.keepOpen = true;
         this.panel.open = true;
         this.root.scrollIntoView({ block: "start" });
       }
@@ -196,6 +214,9 @@ class ChartsPanel {
         // A fragment that is not a spec is ignored
       }
     }
+    // With nothing suggested and no chart showing, the panel gets out of the
+    // way. Opening it again offers "Build a chart".
+    if (!this.suggestions.length && !this.current && !this.keepOpen) this.panel.open = false;
   }
 
   statusText(profile) {

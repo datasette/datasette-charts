@@ -33,6 +33,8 @@ Beside the full-size chart is a builder for changing the chart type, columns, ag
 
 The chart you are looking at is kept in the page's URL fragment, so the address bar always holds a link to it.
 
+When nothing is suggested for a table, the panel starts collapsed. Opening it still offers "Build a chart".
+
 Charts never fetch every row. Each one compiles to a SQL query that returns a small, aggregated result, and that query is what "View and edit this chart's SQL" links to.
 
 ### Filters and facets

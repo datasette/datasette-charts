@@ -237,16 +237,6 @@
   gap: 0.6rem;
   font-size: 0.85em;
 }
-.dc-builder h4 {
-  margin: 0;
-  font-size: 0.8em;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-decoration: none;
-  border: 0;
-  color: var(--dc-muted);
-}
 .dc-channel {
   display: flex;
   flex-direction: column;

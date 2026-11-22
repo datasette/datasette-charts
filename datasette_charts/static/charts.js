@@ -435,7 +435,7 @@ class ChartsPanel {
     this.chartEl = h("div", { class: "dc-chart", role: "img" });
     this.noteEl = h("p", { class: "dc-note", "aria-live": "polite" });
     this.linksEl = h("div", { class: "dc-links" });
-    this.builderEl = h("form", { class: "dc-builder", onsubmit: (event) => event.preventDefault() });
+    this.builderEl = h("form", { class: "dc-builder", "aria-label": "Chart settings", onsubmit: (event) => event.preventDefault() });
     this.builderEl.addEventListener("change", (event) => this.onBuilderChange(event.target));
     this.view.replaceChildren(
       h(
@@ -654,7 +654,7 @@ class ChartsPanel {
         );
       }
     }
-    this.builderEl.replaceChildren(h("h4", {}, "Build"), ...fields);
+    this.builderEl.replaceChildren(...fields);
     if (focused && this.builderEl.elements[focused]) this.builderEl.elements[focused].focus();
   }
 

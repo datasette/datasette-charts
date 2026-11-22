@@ -1,9 +1,9 @@
 # Datasette chart suggestions: specification
 
-- **Status:** Draft 1
+- **Status:** Draft 2
 - **Date:** 2026-11-22
 - **Working name:** `datasette-charts` (placeholder; not yet checked against existing plugin names)
-- **Datasette baseline:** commit `1d629fb` (2026-11-21, after 1.0a43). File and line references in this document are to that commit.
+- **Datasette baseline:** commit `56e02c1` (2026-11-22, after 1.0a43, unreleased). File and line references in this document are to that commit. The plugin needs this commit or later (section 15.1).
 
 ## 1. Summary
 
@@ -59,7 +59,7 @@ These were settled in discussion. Everything else in this document is a proposal
 | D7 | Interaction | Suggestions are one-shot. Users can also build any suggestable chart manually. |
 | D8 | Column detection | Detect everything useful: temporal columns, latitude/longitude, identifiers, foreign keys, categories versus free text, and more. |
 | D9 | Large tables | Profile large or expensive tables in a Datasette background task and store the results in a table in the internal database. |
-| D10 | Time limits | Datasette core can be changed so `execute()` can raise the time limit beyond the default. |
+| D10 | Time limits | Datasette core can be changed so `execute()` can raise the time limit beyond the default. Done in core commit `56e02c1` (section 15.1). |
 | D11 | Rendering | Built-in charts use Observable Plot. The extension mechanism lets plugins use any charting library, or their own code. |
 | D12 | Default chart set | Histogram, category bar, time-series line, scatter or binned heatmap, map, and grouped or stacked bar. |
 | D13 | Reasons | Each suggestion carries a plain-English reason, shown to the user. |
@@ -276,7 +276,7 @@ select t.* from probes join "orders" t on t.rowid = probes.r
 
 **Chunked full scans.** For rowid tables, the full tier runs the one-scan query in rowid ranges (`where rowid >= :lo and rowid < :hi`) and merges results in Python. Counts, sums, minimums and maximums merge exactly. This keeps each query short, frees the SQL thread between chunks, and gives a natural progress measure. Distinct counts and top values do not merge across chunks, so they run afterwards as separate per-column queries, each under a time limit; a column whose query times out keeps its sample-tier estimate.
 
-Queries and views cannot be chunked. Their full profile is one aggregate query under the extended time limit (section 15). If it times out, the sample-tier profile stays in place and the stored profile records that the full tier was not reached.
+Queries and views cannot be chunked. Their full profile is one aggregate query under the extended time limit (section 15.1). If it times out, the sample-tier profile stays in place and the stored profile records that the full tier was not reached.
 
 ### 7.5 Temporal detection (assumed input)
 
@@ -372,6 +372,7 @@ Other rules:
 - **Deduplication:** enqueueing a source that already has a `pending` or `running` job returns the existing job.
 - **Restart:** at startup, jobs left in `running` are set back to `pending`. This only matters when the internal database is persistent.
 - **Cancellation:** cancelling the asyncio task does not stop a SQLite query that is already running in a thread. Cancellation therefore takes effect between chunks, and each chunk is bounded by its time limit.
+- **Telemetry:** a full-tier query that hits `background_time_limit_ms` is recorded as an error on its `execute()` span, because core only treats a timeout as expected when the limit is shorter than `sql_time_limit_ms` (section 15.1). These timeouts are part of the design (section 7.4), so they will show up as errors in traces.
 - **Permissions:** background tasks carry no actor. Permission is checked when the job is enqueued, and the actor id is recorded on the job.
 - **Thread pool:** SQL reads share a pool of `num_sql_threads` threads (default 3) with page requests. Chunking and single-job concurrency keep the impact down; section 19 lists this as a risk to measure.
 
@@ -582,7 +583,7 @@ For each registered chart type, call `propose(profile)`. A chart type returns ze
 
 ### 10.2 Verify
 
-Optional and budgeted. A chart type can confirm a promising candidate with one cheap query, typically against the sample: is this time series flat, do these two measures correlate, does this category have a dominant value. The engine gives each request a total verify budget (time and query count) and verifies candidates in descending score order until the budget runs out. Unverified candidates keep their original score.
+Optional and budgeted. Verify queries run with a `custom_time_limit` capped by `datasette.capped_time_limit_ms()` (section 15.1), so the budget can shorten the SQL time limit but never extend it. A chart type can confirm a promising candidate with one cheap query, typically against the sample: is this time series flat, do these two measures correlate, does this category have a dominant value. The engine gives each request a total verify budget (time and query count) and verifies candidates in descending score order until the budget runs out. Unverified candidates keep their original score.
 
 ### 10.3 Rank
 
@@ -849,7 +850,7 @@ The builder edits the same spec the suggestion produced. Validation errors from 
 - **Tables and views:** suggestions, profiles and chart data require `view-table` on the table. `execute-sql` is not required (goal 6).
 - **Arbitrary queries:** require `execute-sql` on the database.
 - **Stored queries:** require `view-query` on the query.
-- **What a user without `execute-sql` gains:** the data endpoint gives them constrained aggregate queries over tables they can already read in full. It reveals nothing they could not get by paging through the table. The cost is CPU, which is bounded by the SQL time limit.
+- **What a user without `execute-sql` gains:** the data endpoint gives them constrained aggregate queries over tables they can already read in full. It reveals nothing they could not get by paging through the table. The cost is CPU, which is bounded by the SQL time limit: the data endpoint never passes a `custom_time_limit` above `sql_time_limit_ms`, and never takes one from the request without capping it (section 15.1).
 - **Profiles:** contain data values, so the profile endpoint applies the same check as the source.
 - **Background jobs:** permission is checked at enqueue time, and the actor is recorded.
 - **Read-only:** all profiling and chart SQL runs through `Database.execute()` on Datasette's read connections.
@@ -857,31 +858,33 @@ The builder edits the same spec the suggestion produced. Validation errors from 
 
 ## 15. Changes to Datasette core
 
-### 15.1 Required: let `execute()` exceed the default time limit
+### 15.1 Done: `execute()` can exceed the default time limit
 
-Today `Database.execute()` takes `custom_time_limit`, but only applies it when it is shorter than `sql_time_limit_ms` (default 1,000 ms):
+Draft 1 listed this as a required core change. It landed in commit `56e02c1` (PR #3106), with a different design from the one Draft 1 proposed.
+
+Draft 1 proposed keeping `custom_time_limit` as shorter-only and adding a separate `time_limit_ms` argument for trusted callers. Core instead changed `custom_time_limit` itself, so it now sets the limit in either direction:
 
 ```python
-time_limit_ms = self.ds.sql_time_limit_ms
-timeout_expected = bool(custom_time_limit) and custom_time_limit < time_limit_ms
-if timeout_expected:
-    time_limit_ms = custom_time_limit
+default_time_limit_ms = self.ds.sql_time_limit_ms
+time_limit_ms = custom_time_limit or default_time_limit_ms
+timeout_expected = time_limit_ms < default_time_limit_ms
 ```
 
-That clamp is also a security boundary. The `?_timelimit=` query string parameter is passed straight into `custom_time_limit` (`datasette/views/database.py:826` and `datasette/views/table.py:2556`), so simply removing the clamp would let any visitor raise the limit from the URL.
+The cap moved from `execute()` to its callers. A new method, `datasette.capped_time_limit_ms(time_limit_ms)`, returns the smaller of its argument and `sql_time_limit_ms`. Core uses it for `?_timelimit=`, the facet time limits, table counts and autocomplete. The method is not in the documentation yet, so it may not be a stable plugin API.
 
-Proposed change:
+What this means for the plugin:
 
-- Keep `custom_time_limit` exactly as it is, for request-supplied values.
-- Add a separate keyword-only argument for trusted Python callers that can set the limit in either direction. `time_limit_ms` would match the name `execute_write()` already uses.
-- Leave the `timeout_expected` telemetry logic tied to `custom_time_limit`.
-
-With this in place the profiler uses `execute()` for its long queries and gets the time budget and query interruption from Datasette's existing progress handler. Without it, the fallback is `Database.execute_fn()`, which has no time limit at all and would need the plugin to install its own progress handler.
+- **Long queries.** The full tier passes `custom_time_limit=background_time_limit_ms` to `execute()` and gets the time budget and query interruption from Datasette's existing progress handler. The `execute_fn()` fallback from Draft 1 is no longer needed.
+- **The plugin owns the cap.** `execute()` no longer protects against a limit that is too long. Every limit that should only shorten the default (sample tier, verify, thumbnails, chart data) goes through `capped_time_limit_ms()`. No time limit is ever taken from a request without capping it. Only the background worker passes an uncapped limit, and that value comes from plugin configuration.
+- **Telemetry.** A timeout is only treated as expected when the limit is shorter than `sql_time_limit_ms`. Full-tier timeouts are therefore recorded as span errors (section 7.7). A way for a caller to mark a long timeout as expected would be a small follow-up for core (section 15.2).
+- **Minimum version.** The plugin depends on the first Datasette release that includes `56e02c1`. On 1.0a43 and earlier a longer `custom_time_limit` is silently ignored, so the full tier would run under the default one-second limit.
 
 ### 15.2 Optional
 
 | Change | Why |
 |--------|-----|
+| A way to mark a longer-than-default timeout as expected | Full-tier profiling timeouts are part of the design but are recorded as span errors (section 15.1) |
+| Document `datasette.capped_time_limit_ms()` | The plugin relies on it to cap its short time limits (section 15.1) |
 | Date and datetime column types | A home for temporal detection results that users can correct (section 7.5) |
 | A dedicated SQL thread or executor for background work | A long profile query currently occupies one of the three request threads |
 | Pruning of finished background task handles | Not needed by this design (one long-lived worker), but would allow simpler per-job tasks |
@@ -901,7 +904,7 @@ plugins:
     max_suggestions: 8
     sample_rows: 10000
     inline_row_limit: 50000           # at or below this, profile inline and do not store
-    background_time_limit_ms: 30000   # per chunk or per query in the full tier
+    background_time_limit_ms: 30000   # per chunk or per query in the full tier; may exceed sql_time_limit_ms
     chunk_rows: 250000
     stale_after_hours: 24
     stale_row_change: 0.10
@@ -925,7 +928,7 @@ The two open questions, profiling budget and cross-type ranking, will be answere
 
 | Milestone | Contents |
 |-----------|----------|
-| M0 | Core change: `execute()` time limit (section 15.1) |
+| M0 | Core change: `execute()` time limit (section 15.1). Done in `56e02c1`; remaining work is to pin the minimum Datasette version once it is released |
 | M1 | `Source`; tier 0 and tier 1 profiler; `register_chart_types`; DSL validation; three chart types (histogram, category bar, time-series line); `data.json` and `suggest.json`; suggestions strip; CLI and snapshot harness |
 | M2 | Remaining default chart types (scatter and heatmap, grouped and stacked bar, map); manual builder; thumbnails with on-demand previews |
 | M3 | Full tier; internal database tables; background worker; staleness; profile status in the UI |
@@ -951,26 +954,27 @@ M1 is deliberately the thinnest slice that exercises every interface: three char
 
 ## Appendix A: Datasette facts this spec relies on
 
-Checked against commit `1d629fb`.
+Checked against commit `56e02c1`.
 
 | Fact | Where |
 |------|-------|
-| `add_background_task(func, name=None)`; `func` is `async def f(datasette)`; added in 1.0a40 | `datasette/app.py:3295`, `docs/internals.rst:1453` |
+| `add_background_task(func, name=None)`; `func` is `async def f(datasette)`; added in 1.0a40 | `datasette/app.py:3304`, `docs/internals.rst:1453` |
 | Background tasks are plain asyncio tasks; finished handles are not pruned | `datasette/background_tasks.py:105-115`, `:154` |
-| `Database.execute()` signature and the shorter-only clamp | `datasette/database.py:751-769` |
-| `?_timelimit=` is passed into `custom_time_limit` | `datasette/views/database.py:826`, `datasette/views/table.py:2556` |
+| `Database.execute()` signature; `custom_time_limit` replaces the default in either direction | `datasette/database.py:751-771`, `docs/internals.rst:2214` |
+| `datasette.capped_time_limit_ms()` caps a limit at `sql_time_limit_ms`; not documented | `datasette/app.py:1525` |
+| `?_timelimit=` is capped, then passed into `custom_time_limit` | `datasette/views/database.py:826-830`, `datasette/views/table.py:2559-2563` |
 | Time limits are enforced with a SQLite progress handler | `datasette/utils/__init__.py:434-454` |
 | `sql_time_limit_ms` defaults to 1,000; `num_sql_threads` defaults to 3 | `datasette/app.py:231-235` |
 | `execute_write()` has `time_limit_ms=2000` | `datasette/database.py:315` |
 | `execute_fn()` runs a function on a read connection with no time limit | `datasette/database.py:702` |
 | The default internal database is a temporary file on disk | `datasette/app.py:540` |
 | `--internal` and `DATASETTE_INTERNAL`; etiquette for plugin tables | `docs/internals.rst:2966-2999` |
-| Table counts are capped at 10,000 | `datasette/database.py:102`, `:910` |
-| `PRAGMA schema_version` is tracked in `catalog_databases` | `datasette/database.py:1257`, `datasette/utils/internal_db.py:32` |
+| Table counts are capped at 10,000 | `datasette/database.py:102`, `:912` |
+| `PRAGMA schema_version` is tracked in `catalog_databases` | `datasette/database.py:1259`, `datasette/utils/internal_db.py:32` |
 | Column types: base class, built-ins (`url`, `email`, `json`, `textarea`), hook | `datasette/column_types.py`, `datasette/default_column_types.py`, `datasette/hookspecs.py:92` |
 | `top_table`, `top_query`, `top_stored_query`, `table_actions`, `query_actions` | `datasette/hookspecs.py:170-235` |
 | Plugins can define their own hooks with `pm.add_hookspecs` | `docs/writing_plugins.rst:403-427` |
-| `datasette.allowed(action=, resource=, actor=)`; `TableResource`, `DatabaseResource`, `QueryResource` | `datasette/app.py:2119`, `datasette/resources.py` |
+| `datasette.allowed(action=, resource=, actor=)`; `TableResource`, `DatabaseResource`, `QueryResource` | `datasette/app.py:2128`, `datasette/resources.py` |
 | Actions `view-table`, `execute-sql`, `view-query` | `datasette/default_actions.py` |
 | Column statistics dialog, added in 1.0a42 | `datasette/static/column-stats.js` |
 

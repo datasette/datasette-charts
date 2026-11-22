@@ -1,0 +1,287 @@
+/* datasette-charts. Borders and washes are mixed from the page's own text
+   color, so the panel follows whatever theme the page uses. */
+
+.datasette-charts {
+  --dc-line: color-mix(in srgb, currentColor 16%, transparent);
+  --dc-wash: color-mix(in srgb, currentColor 5%, transparent);
+  --dc-muted: color-mix(in srgb, currentColor 62%, transparent);
+  --dc-accent: #2a78d6;
+  margin: 1rem 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.datasette-charts [hidden] {
+  display: none !important;
+}
+
+.dc-panel > summary {
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+.dc-heading {
+  font-weight: 600;
+}
+.dc-status {
+  margin-left: 0.6rem;
+  font-size: 0.85em;
+  color: var(--dc-muted);
+}
+
+/* Suggestions strip: a row of cards, in rank order */
+.dc-strip {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding: 0.5rem 2px 0.75rem;
+  scroll-snap-type: x proximity;
+}
+.dc-strip:empty {
+  display: none;
+}
+.dc-card {
+  flex: 0 0 auto;
+  width: 226px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 8px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--dc-line);
+  border-radius: 6px;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+.dc-card:hover {
+  background: var(--dc-wash);
+}
+.dc-card:focus-visible,
+.dc-close:focus-visible,
+.dc-link:focus-visible {
+  outline: 2px solid var(--dc-accent);
+  outline-offset: 2px;
+}
+.dc-card[aria-pressed="true"] {
+  border-color: var(--dc-accent);
+  box-shadow: 0 0 0 1px var(--dc-accent);
+}
+.dc-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 208px;
+  height: 112px;
+  overflow: hidden;
+  color: var(--dc-muted);
+}
+.dc-thumb > svg {
+  width: 40px;
+  height: 40px;
+}
+.dc-thumb-chart {
+  display: block;
+  line-height: 0;
+}
+.dc-thumb-build {
+  font-size: 2.2rem;
+  font-weight: 300;
+  border: 1px dashed var(--dc-line);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.dc-card-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  line-height: 1.25;
+}
+.dc-card-reason {
+  font-size: 0.8em;
+  line-height: 1.3;
+  color: var(--dc-muted);
+}
+
+/* Chart view: the chart at full size with the builder beside it */
+.dc-view {
+  margin-top: 0.25rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--dc-line);
+  border-radius: 6px;
+}
+.dc-view-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.dc-title {
+  margin: 0;
+  font-size: 1.1em;
+}
+.dc-reason {
+  margin: 0.2rem 0 0;
+  font-size: 0.9em;
+  color: var(--dc-muted);
+}
+.dc-reason:empty,
+.dc-note:empty {
+  display: none;
+}
+.dc-close,
+.dc-link {
+  font: inherit;
+  font-size: 0.85em;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--dc-line);
+  border-radius: 4px;
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+}
+.dc-close:hover,
+.dc-link:hover {
+  background: var(--dc-wash);
+}
+.dc-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 0.9rem;
+}
+.dc-chart-col {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+.dc-chart {
+  position: relative;
+  min-height: 120px;
+  transition: opacity 0.15s;
+}
+.dc-chart.dc-loading {
+  opacity: 0.45;
+}
+.dc-chart figure {
+  margin: 0;
+}
+/* Plot styles its legends with zero-specificity selectors, which any page
+   stylesheet overrides, so the legend layout is restated here */
+.dc-chart [class*="-swatches-wrap"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 1.1rem;
+  min-height: 28px;
+  margin: 0 0 0.4rem;
+  font-size: 12px;
+}
+.dc-chart [class$="-swatch"] {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+.dc-chart [class$="-swatch"] > svg {
+  margin-right: 0.4em;
+}
+.dc-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+  color: var(--dc-muted);
+}
+.dc-note.dc-error {
+  color: inherit;
+  padding: 0.5rem 0.7rem;
+  background: var(--dc-wash);
+  border-left: 3px solid #d03b3b;
+}
+.dc-links {
+  margin-top: 0.75rem;
+  font-size: 0.85em;
+}
+.dc-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.dc-data > summary {
+  cursor: pointer;
+  color: var(--dc-muted);
+}
+.dc-data-scroll {
+  max-height: 260px;
+  overflow: auto;
+  margin-top: 0.4rem;
+}
+.dc-data table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.dc-data th,
+.dc-data td {
+  padding: 0.15rem 0.7rem 0.15rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--dc-line);
+  white-space: nowrap;
+}
+
+/* Manual builder */
+.dc-builder {
+  flex: 0 1 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.85em;
+}
+.dc-builder h4 {
+  margin: 0;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 0;
+  color: var(--dc-muted);
+}
+.dc-channel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.6rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--dc-line);
+}
+.dc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.dc-field > span {
+  font-weight: 600;
+}
+.dc-field-small {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dc-field-small > span {
+  flex: 0 0 4.6rem;
+  font-weight: 400;
+  color: var(--dc-muted);
+}
+.dc-field select,
+.dc-field input {
+  font: inherit;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  padding: 0.15rem 0.25rem;
+}
+.dc-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--dc-muted);
+}

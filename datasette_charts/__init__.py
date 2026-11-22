@@ -130,9 +130,18 @@ def top_table(datasette, request, database, table):
     )
 
 
+def _is_chart_sql(sql: str) -> bool:
+    """
+    The SQL behind "View and edit this chart's SQL" uses chart_ parameters.
+    Charting it again would clash with the parameters the new chart adds,
+    so pages showing it get no charts.
+    """
+    return any(name.startswith("chart_") for name in named_parameters(sql))
+
+
 @hookimpl
 def top_query(datasette, request, database, sql):
-    if not sql or not sql.strip():
+    if not sql or not sql.strip() or _is_chart_sql(sql):
         return None
 
     async def inner():
@@ -168,7 +177,7 @@ def top_stored_query(datasette, request, database, query_name):
 
     async def inner():
         query = await datasette.get_query(database, query_name)
-        if query is None or query.is_write:
+        if query is None or query.is_write or _is_chart_sql(query.sql):
             return None
         params = {
             name: request.args.get(name)
@@ -215,5 +224,7 @@ def view_actions(datasette, actor, database, view, request):
 @hookimpl
 def query_actions(datasette, actor, database, query_name, request, sql, params):
     if not sql and not query_name:
+        return []
+    if sql and _is_chart_sql(sql):
         return []
     return _chart_action()

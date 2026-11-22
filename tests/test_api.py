@@ -322,6 +322,42 @@ async def test_panel_on_table_view_and_query_pages(ds):
     assert "datasette-charts" not in (await ds.client.get("/shop")).text
 
 
+@pytest.mark.asyncio
+async def test_no_charts_for_a_charts_own_sql(db_path):
+    "Charting a chart's SQL would clash with the chart_ parameters it uses"
+    ds = Datasette(
+        [db_path],
+        config={
+            "databases": {
+                "shop": {
+                    "queries": {
+                        "saved_chart": {
+                            "sql": "select status from orders limit :chart_x_limit"
+                        }
+                    }
+                }
+            }
+        },
+    )
+    await ds.invoke_startup()
+    histogram = {
+        "v": 1,
+        "type": "histogram",
+        "encoding": {"x": {"column": "price"}},
+        "options": {},
+    }
+    data = await ds.client.get(
+        "/shop/-/charts/data.json" + query(source=TABLE, spec=histogram)
+    )
+    sql_url = data.json()["sql_url"]
+    assert ":chart_x_start" in data.json()["sql"]
+    for path in (sql_url, "/shop/saved_chart?chart_x_limit=5"):
+        page = await ds.client.get(path)
+        assert page.status_code == 200
+        assert 'id="datasette-charts"' not in page.text
+        assert "Chart this data" not in page.text
+
+
 def bootstrap_from(html):
     raw = html.split('data-bootstrap="')[1].split('"')[0]
     return json.loads(raw.replace("&#34;", '"').replace("&amp;", "&"))

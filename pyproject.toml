@@ -33,6 +33,12 @@ CI = "https://github.com/datasette/datasette-charts/actions"
 [project.entry-points.datasette]
 charts = "datasette_charts"
 
+[tool.setuptools.packages.find]
+include = ["datasette_charts*"]
+
+[tool.setuptools.package-data]
+datasette_charts = ["static/*", "static/*/*"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"

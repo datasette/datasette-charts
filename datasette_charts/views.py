@@ -11,6 +11,8 @@ import urllib.parse
 from datasette import Response
 from datasette.database import QueryInterrupted
 from datasette.resources import DatabaseResource, QueryResource, TableResource
+from datasette.utils.asgi import Base400
+from datasette.views.base import DatasetteError
 from datasette.utils import (
     InvalidSql,
     named_parameters,
@@ -20,6 +22,7 @@ from datasette.utils import (
 
 from . import dsl, engine
 from .config import get_config
+from .filters import build_where, clean_filters, filters_from_args
 from .profiler import ProfileError, ProfileTimeout
 from .sources import Source
 from .sqlgen import AGGREGATES, SORTS, TIME_UNITS, SpecError
@@ -119,7 +122,24 @@ async def resolve_source(datasette, request, db, descriptor) -> Source:
             action="view-table", resource=TableResource(db.name, table), actor=actor
         ):
             raise ChartsError("Permission denied", 403)
-        return Source(database=db.name, kind="table", table=table)
+        try:
+            filters = clean_filters(descriptor.get("filters"))
+        except ValueError as e:
+            raise ChartsError(str(e))
+        if not filters:
+            return Source(database=db.name, kind="table", table=table)
+        where, params = await _table_where(datasette, request, db, table, filters)
+        if where is None:
+            # Filters that select every row: the same source as the plain table
+            return Source(database=db.name, kind="table", table=table)
+        return Source(
+            database=db.name,
+            kind="table",
+            table=table,
+            filters=filters,
+            where=where,
+            params=params,
+        )
 
     if kind == "query":
         sql = descriptor.get("sql")
@@ -168,12 +188,28 @@ async def resolve_source(datasette, request, db, descriptor) -> Source:
     raise ChartsError("source kind must be table, query or stored_query")
 
 
+async def _table_where(datasette, request, db, table: str, filters: tuple) -> tuple:
+    "The WHERE clause for a filtered table, with the table page's own errors"
+    try:
+        return await build_where(datasette, request, db.name, table, filters)
+    except DatasetteError as e:
+        # For example ?_where= without execute-sql
+        raise ChartsError(e.message, e.status if e.status != 500 else 400)
+    except Base400 as e:
+        raise ChartsError(str(e) or "Invalid filters", e.status)
+    except (ValueError, KeyError, TypeError):
+        raise ChartsError("Invalid filters")
+
+
 async def _source_from_request(datasette, request, db) -> Source:
     descriptor = _json_arg(request, "source")
     if descriptor is None and request.url_vars.get("table"):
+        # /db/table/-/charts/suggest.json takes the table page's own query
+        # string, so ?state=CA means the same thing in both places
         descriptor = {
             "kind": "table",
             "table": tilde_decode(request.url_vars["table"]),
+            "filters": [list(pair) for pair in filters_from_args(request.args)],
         }
     if descriptor is None and request.args.get("sql"):
         # ?sql= with named parameters in the query string, as on the query page

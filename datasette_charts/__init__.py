@@ -31,6 +31,7 @@ from .chart_types import (  # noqa: E402
     CompiledQuery,
 )
 from .config import PLUGIN_NAME, get_config  # noqa: E402
+from .filters import filters_from_args  # noqa: E402
 from .sources import Source  # noqa: E402
 
 __all__ = ["Candidate", "Channel", "ChartType", "CompiledQuery", "Source"]
@@ -114,26 +115,18 @@ def _panel(datasette, database: str, source: dict, suggest_url: str, **extra) ->
     )
 
 
-def _is_filtered(request) -> bool:
-    "Does this table page have filters applied? Charts ignore them for now."
-    for key in request.args.keys():
-        if (
-            not key.startswith("_")
-            or key in ("_where", "_search")
-            or key.startswith("_search_")
-        ):
-            return True
-    return False
-
-
 @hookimpl
 def top_table(datasette, request, database, table):
+    source = {"database": database, "kind": "table", "table": table}
+    # Charts cover the rows the page shows, so they get the page's filters
+    filters = filters_from_args(request.args)
+    if filters:
+        source["filters"] = [list(pair) for pair in filters]
     return _panel(
         datasette,
         database,
-        {"database": database, "kind": "table", "table": table},
+        source,
         "{}/-/charts/suggest.json".format(datasette.urls.table(database, table)),
-        filtered=_is_filtered(request),
     )
 
 

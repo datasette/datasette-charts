@@ -168,7 +168,10 @@ async def _profile(datasette, db, source, config, runner, profile) -> None:
     except QueryInterrupted:
         profile.notes.append("Counting rows timed out")
 
-    use_table_tricks = source.kind == "table" and not profile.is_view
+    # Rowid sampling reads the table directly, so it cannot see a filter
+    use_table_tricks = (
+        source.kind == "table" and not profile.is_view and not source.where
+    )
     cell_limit = int(config["inline_cell_limit"])
     inline = (
         profile.row_count is not None

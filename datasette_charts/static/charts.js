@@ -168,10 +168,12 @@ class ChartsPanel {
     if (this.loaded) return;
     this.loaded = true;
     this.status.textContent = "Looking for charts…";
-    const isTable = this.source.kind === "table";
+    // A plain table has its own suggestions URL. Anything else, including a
+    // filtered table, is described by its source.
+    const plainTable = this.source.kind === "table" && !this.source.filters;
     const [types, suggested] = await Promise.all([
       getJSON(this.urls.types),
-      getJSON(this.urls.suggest, isTable ? null : { source: JSON.stringify(this.source) }),
+      getJSON(this.urls.suggest, plainTable ? null : { source: JSON.stringify(this.source) }),
     ]);
     if (!types.ok || !suggested.ok) {
       this.status.textContent = `Charts are not available. ${errorMessage(types.ok ? suggested : types)}`;
@@ -205,7 +207,11 @@ class ChartsPanel {
         `Suggestions are based on a sample of ${profile.rows_profiled.toLocaleString()}${of} rows; charts use every row.`
       );
     }
-    if (this.bootstrap.filtered) parts.push("Charts show the whole table, not the current filters.");
+    if (this.source.filters) {
+      const rows = profile.row_count === null ? "the rows" : `the ${count(profile.row_count, "row")}`;
+      const match = profile.row_count === 1 ? "matches" : "match";
+      parts.push(`Charts cover ${rows} that ${match} the current filters.`);
+    }
     return parts.join(" ");
   }
 

@@ -35,6 +35,10 @@ The chart you are looking at is kept in the page's URL fragment, so the address 
 
 Charts never fetch every row. Each one compiles to a SQL query that returns a small, aggregated result, and that query is what "View and edit this chart's SQL" links to.
 
+### Filters and facets
+
+On a filtered table page the charts cover the rows the page shows. Column filters such as `?state=CA` and `?price__gt=5`, `?_search=`, `?_where=` and `?_through=` all apply, and so does anything you click in a facet. The suggestions are worked out again for the filtered rows, so a column that the filter has narrowed to a single value is no longer suggested.
+
 ### Chart types
 
 | Type | Shows | Suggested when |
@@ -52,6 +56,7 @@ Suggestions come from a profile of the source: row count, types, distinct counts
 
 - A source of up to 50,000 rows (and 1,000,000 cells) is profiled in full.
 - A larger one is profiled from a sample of up to 10,000 rows. The panel says so when this happens. Charts still query every row.
+- For a table, the sample is spread evenly across its rows. For a view, a query or a filtered table it is the first rows the source returns, which can be less representative.
 
 To let more work happen inline, raise Datasette's time limit and the plugin's limits together:
 
@@ -131,7 +136,11 @@ datasette charts profile data.db orders
 | `/<db>/-/charts/data.json?source=...&spec=...` | The rows for one chart |
 | `/<db>/-/charts/profile.json?source=...` | The profile of a source |
 
-`source` is a JSON object such as `{"kind": "table", "table": "orders"}` or `{"kind": "query", "sql": "...", "params": {}}`. `spec` is a chart in the JSON format the suggestions use:
+`source` is a JSON object such as `{"kind": "table", "table": "orders"}` or `{"kind": "query", "sql": "...", "params": {}}`.
+
+A filtered table is a table source with the filters from the table page's query string as pairs: `{"kind": "table", "table": "orders", "filters": [["state", "CA"], ["price__gt", "5"]]}`. The table's own suggestions endpoint takes that query string directly, so `/<db>/<table>/-/charts/suggest.json?state=CA&price__gt=5` means the same rows as the table page with those parameters, and its response includes the `source` to pass to `data.json`.
+
+`spec` is a chart in the JSON format the suggestions use:
 
 ```json
 {
@@ -173,7 +182,6 @@ From the spec, in rough order of how much it matters:
 
 - **The background full tier and stored profiles.** Nothing is written to the internal database and no background task runs. Profiles are kept in memory for a few minutes. A source too large to profile under the time limit gets suggestions from a sample, or none.
 - **The verify stage.** Candidates go straight from propose to rank, so nothing checks whether a time series is flat or two measures are related.
-- **Filtered table pages.** Charts on `?state=CA` show the whole table, and the panel says so.
 - **Precomputed thumbnails.** Every thumbnail runs its query when it scrolls into view.
 - **The snapshot harness, contact sheet and benchmarks.**
 - **Magic parameters in stored queries**, such as `:_actor_id`.

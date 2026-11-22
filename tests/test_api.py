@@ -322,12 +322,230 @@ async def test_panel_on_table_view_and_query_pages(ds):
     assert "datasette-charts" not in (await ds.client.get("/shop")).text
 
 
+def bootstrap_from(html):
+    raw = html.split('data-bootstrap="')[1].split('"')[0]
+    return json.loads(raw.replace("&#34;", '"').replace("&amp;", "&"))
+
+
 @pytest.mark.asyncio
-async def test_filtered_table_pages_say_charts_ignore_filters(ds):
-    plain = (await ds.client.get("/shop/orders")).text
-    filtered = (await ds.client.get("/shop/orders?status=paid")).text
-    assert "&#34;filtered&#34;: false" in plain
-    assert "&#34;filtered&#34;: true" in filtered
+async def test_table_page_passes_its_filters_to_the_panel(ds):
+    plain = bootstrap_from((await ds.client.get("/shop/orders")).text)
+    assert "filters" not in plain["source"]
+    # Sorting and paging change how rows are shown, not which rows there are
+    sorted_page = bootstrap_from(
+        (await ds.client.get("/shop/orders?_sort_desc=price&_size=10")).text
+    )
+    assert "filters" not in sorted_page["source"]
+    filtered = bootstrap_from(
+        (
+            await ds.client.get(
+                "/shop/orders?status=paid&quantity__gt=1&_sort=price&_facet=status"
+            )
+        ).text
+    )
+    assert filtered["source"] == {
+        "database": "shop",
+        "kind": "table",
+        "table": "orders",
+        "filters": [["quantity__gt", "1"], ["status", "paid"]],
+    }
+
+
+@pytest.mark.asyncio
+async def test_charts_cover_the_rows_the_filtered_page_shows(ds):
+    # The same query string means the same rows on the table page and here
+    page = (
+        await ds.client.get("/shop/orders.json?status=paid&quantity__gt=1&_extra=count")
+    ).json()
+    assert page["count"] == 264
+    by_query_string = await ds.client.get(
+        "/shop/orders/-/charts/suggest.json?status=paid&quantity__gt=1&_sort=price"
+    )
+    source = {
+        "kind": "table",
+        "table": "orders",
+        "filters": [["status", "paid"], ["quantity__gt", "1"]],
+    }
+    by_source = await ds.client.get(
+        "/shop/-/charts/suggest.json" + query(source=source)
+    )
+    assert by_query_string.status_code == by_source.status_code == 200
+    assert by_query_string.json() == by_source.json()
+    suggested = by_source.json()
+    assert suggested["source"]["filters"] == [["quantity__gt", "1"], ["status", "paid"]]
+    # The profile is of the filtered rows, so suggestions suit them:
+    # status is now a single value, which is not worth a chart
+    assert suggested["profile"]["row_count"] == 264
+    roles = {column["name"]: column["role"] for column in suggested["columns"]}
+    assert roles["status"] == "constant"
+    assert "Rows by status" not in [s["title"] for s in suggested["suggestions"]]
+
+    data = await ds.client.get(
+        "/shop/-/charts/data.json" + query(source=suggested["source"], spec=LINE)
+    )
+    assert data.status_code == 200
+    assert sum(row[1] for row in data.json()["rows"]) == 264
+    # The SQL link runs the filtered query too
+    sql_url = data.json()["sql_url"].replace("/-/query?", "/-/query.json?")
+    sql_page = await ds.client.get(sql_url + "&_shape=array")
+    assert sum(row["value"] for row in sql_page.json()) == 264
+    # Unfiltered charts are unaffected
+    unfiltered = await ds.client.get(
+        "/shop/-/charts/data.json" + query(source=TABLE, spec=LINE)
+    )
+    assert sum(row[1] for row in unfiltered.json()["rows"]) == 600
+
+
+@pytest.mark.asyncio
+async def test_filters_that_select_every_row_share_the_plain_table_source(ds):
+    # orders has no full-text index, so the table page ignores ?_search=
+    response = await ds.client.get(
+        "/shop/orders/-/charts/suggest.json?_search=anything"
+    )
+    assert response.status_code == 200
+    assert response.json()["source"] == {
+        "database": "shop",
+        "kind": "table",
+        "table": "orders",
+    }
+
+
+@pytest.mark.asyncio
+async def test_where_filter_needs_execute_sql_as_on_the_table_page(db_path):
+    where = {
+        "kind": "table",
+        "table": "orders",
+        "filters": [["_where", "quantity = 2"]],
+    }
+    path = "/shop/-/charts/data.json" + query(source=where, spec=LINE)
+    ds = Datasette([db_path])
+    await ds.invoke_startup()
+    allowed = await ds.client.get(path)
+    assert allowed.status_code == 200
+    assert sum(row[1] for row in allowed.json()["rows"]) == 150
+
+    locked = Datasette([db_path], config={"allow_sql": False})
+    await locked.invoke_startup()
+    assert (
+        await locked.client.get("/shop/orders?_where=quantity+%3D+2")
+    ).status_code == 403
+    denied = await locked.client.get(path)
+    assert denied.status_code == 403
+    assert denied.json() == {"ok": False, "error": "_where= is not allowed"}
+    # Column filters need no such permission
+    column = {"kind": "table", "table": "orders", "filters": [["quantity", "2"]]}
+    response = await locked.client.get(
+        "/shop/-/charts/data.json" + query(source=column, spec=LINE)
+    )
+    assert response.status_code == 200
+    assert sum(row[1] for row in response.json()["rows"]) == 150
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filters,expected",
+    (
+        ("status=paid", "filters must be a list of [key, value] pairs"),
+        ([["status"]], "filters must be a list of [key, value] pairs"),
+        ([["status", 1]], "filters must be a list of [key, value] pairs"),
+    ),
+)
+async def test_bad_filters(ds, filters, expected):
+    source = {"kind": "table", "table": "orders", "filters": filters}
+    response = await ds.client.get("/shop/-/charts/suggest.json" + query(source=source))
+    assert response.status_code == 400
+    assert response.json() == {"ok": False, "error": expected}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query_string",
+    (
+        "status=paid",
+        "status__not=paid",
+        "status__isnull=1",
+        "price__gte=50&quantity__in=1,2",
+        "note__contains=order+1",
+        "customer_id=3&status=pending",
+        # A column that does not exist matches nothing on the table page
+        "nope=1",
+        "_where=quantity+%3D+2&status=paid",
+        # Clauses are joined without brackets, exactly as the table page joins them
+        "_where=quantity+%3D+2+or+quantity+%3D+3&status=paid",
+    ),
+)
+async def test_filters_match_the_table_page(ds, query_string):
+    page = (
+        await ds.client.get(f"/shop/orders.json?{query_string}&_extra=count")
+    ).json()
+    suggested = (
+        await ds.client.get(f"/shop/orders/-/charts/suggest.json?{query_string}")
+    ).json()
+    assert suggested["ok"] is True
+    assert suggested["profile"]["row_count"] == page["count"]
+    spec = {
+        "v": 1,
+        "type": "bar",
+        "encoding": {"x": {"column": "is_gift"}, "y": {"aggregate": "count"}},
+    }
+    data = await ds.client.get(
+        "/shop/-/charts/data.json" + query(source=suggested["source"], spec=spec)
+    )
+    assert sum(row[2] for row in data.json()["rows"]) == page["count"]
+
+
+@pytest.mark.asyncio
+async def test_through_filter(ds):
+    # Customers with an order priced at 104.9, found through the foreign key
+    # from orders, as the table page finds them
+    through = json.dumps({"table": "orders", "column": "price", "value": "104.9"})
+    query_string = urllib.parse.urlencode({"_through": through})
+    page = (
+        await ds.client.get(f"/shop/customers.json?{query_string}&_extra=count")
+    ).json()
+    assert 0 < page["count"] < 5
+    suggested = (
+        await ds.client.get(f"/shop/customers/-/charts/suggest.json?{query_string}")
+    ).json()
+    assert suggested["profile"]["row_count"] == page["count"]
+    assert suggested["source"]["filters"] == [["_through", through]]
+
+
+@pytest.mark.asyncio
+async def test_search_filter(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "docs.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        create table docs (id integer primary key, title text, kind text, words integer);
+        create virtual table docs_fts using fts5(title, content=docs, content_rowid=id);
+        """)
+    for i in range(60):
+        animal = ("pelican", "otter", "heron")[i % 3]
+        conn.execute(
+            "insert into docs values (?, ?, ?, ?)",
+            (i + 1, f"The {animal} report {i}", ("note", "post")[i % 2], 100 + i * 7),
+        )
+    conn.execute("insert into docs_fts (rowid, title) select id, title from docs")
+    conn.commit()
+    conn.close()
+    ds = Datasette([str(path)])
+    await ds.invoke_startup()
+    page = (await ds.client.get("/docs/docs.json?_search=pelican&_extra=count")).json()
+    assert page["count"] == 20
+    response = await ds.client.get("/docs/docs/-/charts/suggest.json?_search=pelican")
+    assert response.status_code == 200
+    assert response.json()["profile"]["row_count"] == 20
+    spec = {
+        "v": 1,
+        "type": "bar",
+        "encoding": {"x": {"column": "kind"}, "y": {"aggregate": "count"}},
+    }
+    data = await ds.client.get(
+        "/docs/-/charts/data.json" + query(source=response.json()["source"], spec=spec)
+    )
+    assert sorted(row[2] for row in data.json()["rows"]) == [10, 10]
 
 
 @pytest.mark.asyncio

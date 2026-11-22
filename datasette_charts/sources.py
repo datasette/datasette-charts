@@ -36,6 +36,11 @@ class Source:
     sql: str | None = None
     params: dict | None = None
     query_name: str | None = None
+    # A filtered table: the (key, value) pairs from the table page's query
+    # string, and the WHERE clause the server built from them. The clause's
+    # parameters are in ``params``.
+    filters: tuple | None = None
+    where: str | None = None
 
     def __post_init__(self):
         if self.kind not in SOURCE_KINDS:
@@ -49,7 +54,11 @@ class Source:
     def key(self) -> str:
         "Identifies the source: the table name, or a hash of the SQL and params"
         if self.kind == "table":
-            return self.table
+            if not self.filters:
+                return self.table
+            payload = json.dumps([list(pair) for pair in self.filters])
+            digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            return f"{self.table}?{digest}"
         payload = json.dumps(
             [clean_sql(self.sql), self.params or {}],
             sort_keys=True,
@@ -65,7 +74,10 @@ class Source:
     def body(self) -> str:
         "The SQL that goes inside the ``source`` CTE"
         if self.kind == "table":
-            return f"select * from {quote(self.table)}"
+            body = f"select * from {quote(self.table)}"
+            if self.where:
+                body += f" where {self.where}"
+            return body
         return clean_sql(self.sql)
 
     def with_clause(self) -> str:
@@ -86,6 +98,8 @@ class Source:
         d = {"database": self.database, "kind": self.kind}
         if self.kind == "table":
             d["table"] = self.table
+            if self.filters:
+                d["filters"] = [list(pair) for pair in self.filters]
         elif self.kind == "stored_query":
             d["query_name"] = self.query_name
             if self.params:

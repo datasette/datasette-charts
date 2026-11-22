@@ -980,7 +980,7 @@ time_limit_ms = custom_time_limit or default_time_limit_ms
 timeout_expected = time_limit_ms < default_time_limit_ms
 ```
 
-The cap moved from `execute()` to its callers. A new method, `datasette.capped_time_limit_ms(time_limit_ms)`, returns the smaller of its argument and `sql_time_limit_ms`. Core uses it for `?_timelimit=`, the facet time limits, table counts and autocomplete. The method is not in the documentation yet, so it may not be a stable plugin API.
+The cap moved from `execute()` to its callers. A new method, `datasette.capped_time_limit_ms(time_limit_ms)`, returns the smaller of its argument and `sql_time_limit_ms`. Core uses it for `?_timelimit=`, the facet time limits, table counts and autocomplete.
 
 What this means for the plugin:
 
@@ -994,7 +994,6 @@ What this means for the plugin:
 | Change | Why |
 |--------|-----|
 | A way to mark a longer-than-default timeout as expected | Full-tier profiling timeouts are part of the design but are recorded as span errors (section 15.1) |
-| Document `datasette.capped_time_limit_ms()` | The plugin relies on it to cap its short time limits (section 15.1) |
 | Date and datetime column types | A place in the Datasette UI for users to confirm or correct detected temporal columns, in place of plugin configuration (section 7.5) |
 | A dedicated SQL thread or executor for background work | A long profile query currently occupies one of the three request threads |
 | Pruning of finished background task handles | Not needed by this design (one long-lived worker), but would allow simpler per-job tasks |
@@ -1089,7 +1088,7 @@ Checked against commit `56e02c1`.
 | `add_background_task(func, name=None)`; `func` is `async def f(datasette)`; added in 1.0a40 | `datasette/app.py:3304`, `docs/internals.rst:1453` |
 | Background tasks are plain asyncio tasks; finished handles are not pruned | `datasette/background_tasks.py:105-115`, `:154` |
 | `Database.execute()` signature; `custom_time_limit` replaces the default in either direction | `datasette/database.py:751-771`, `docs/internals.rst:2214` |
-| `datasette.capped_time_limit_ms()` caps a limit at `sql_time_limit_ms`; not documented | `datasette/app.py:1525` |
+| `datasette.capped_time_limit_ms()` caps a limit at `sql_time_limit_ms` | `datasette/app.py:1525` |
 | `?_timelimit=` is capped, then passed into `custom_time_limit` | `datasette/views/database.py:826-830`, `datasette/views/table.py:2559-2563` |
 | Time limits are enforced with a SQLite progress handler | `datasette/utils/__init__.py:434-454` |
 | `sql_time_limit_ms` defaults to 1,000; `num_sql_threads` defaults to 3 | `datasette/app.py:231-235` |

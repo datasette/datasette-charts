@@ -93,7 +93,12 @@ export function xLabel(label) {
 
 // Draws the plot into the element and sets what Plot reads from CSS
 export function mount(el, ctx, plot) {
-  plot.style.setProperty("--plot-background", ctx.theme.surface);
+  // Tooltips fill with this. Plot's own stylesheet sets it on every plot
+  // <svg>, so with a legend (a <figure> wrapper) it must be set on the
+  // inner svg too, or tips fall back to white whatever the page theme.
+  for (const node of [plot, ...plot.querySelectorAll("svg")]) {
+    node.style.setProperty("--plot-background", ctx.theme.surface);
+  }
   plot.style.maxWidth = "100%";
   el.replaceChildren(plot);
 }

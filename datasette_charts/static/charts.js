@@ -8,6 +8,7 @@
 import { themeFor } from "./renderers/common.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
+const SELECTED_PREFIX = "datasette-charts:selected:";
 const FRAGMENT = "#chart=";
 const THUMBNAIL = { width: 208, height: 112 };
 const FULL_HEIGHT = 340;
@@ -116,6 +117,26 @@ function remember(storageName, key, value) {
     // Not being able to remember is fine
   }
 }
+
+// JSON with object keys in a fixed order, for comparing specs
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+// A suggested spec carries bins worked out from the data it was suggested
+// for. Without them the server works bins out again from the current data.
+function withoutDerivedBins(spec) {
+  const copy = clone(spec);
+  for (const channel of Object.values(copy.encoding || {})) {
+    if (channel && channel.bin && ("start" in channel.bin || "step" in channel.bin)) delete channel.bin;
+  }
+  return copy;
+}
 const count = (n, noun) => `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 
 // --- The panel ----------------------------------------------------------------
@@ -133,6 +154,7 @@ class ChartsPanel {
     this.suggestions = [];
     this.loaded = false;
     this.current = null; // {spec, title, reason, card}
+    this.cards = [];
     this.requestId = 0;
     this.build();
   }
@@ -206,17 +228,68 @@ class ChartsPanel {
     this.status.title = (suggested.profile.notes || []).join("\n");
     this.renderStrip();
 
-    if (location.hash.startsWith(FRAGMENT)) {
-      try {
-        const spec = JSON.parse(decodeURIComponent(location.hash.slice(FRAGMENT.length)));
-        this.open({ spec, title: "", reason: "" });
-      } catch (e) {
-        // A fragment that is not a spec is ignored
-      }
-    }
+    this.openInitialChart();
     // With nothing suggested and no chart showing, the panel gets out of the
     // way. Opening it again offers "Build a chart".
     if (!this.suggestions.length && !this.current && !this.keepOpen) this.panel.open = false;
+  }
+
+  // --- Which chart is selected ---
+  // A link to a chart wins. Otherwise the chart selected earlier for this
+  // table comes back, so it stays selected while the person filters, facets,
+  // sorts or pages: each of those loads a new page.
+
+  selectionKey() {
+    const source = this.bootstrap.source;
+    if (source.kind === "table") return `${SELECTED_PREFIX}${source.database}/table/${source.table}`;
+    if (source.kind === "stored_query") return `${SELECTED_PREFIX}${source.database}/query/${source.query_name}`;
+    return null; // an arbitrary query can change shape between runs
+  }
+
+  filtersKey() {
+    return canonical([this.source.filters || [], this.source.params || {}]);
+  }
+
+  rememberSelection(spec) {
+    const key = this.selectionKey();
+    if (!key) return;
+    remember("sessionStorage", key, spec ? JSON.stringify({ spec, filters: this.filtersKey() }) : null);
+  }
+
+  openInitialChart() {
+    let spec = null;
+    let exact = true;
+    if (location.hash.startsWith(FRAGMENT)) {
+      try {
+        spec = JSON.parse(decodeURIComponent(location.hash.slice(FRAGMENT.length)));
+      } catch (e) {
+        // A fragment that is not a spec is ignored
+      }
+    } else if (this.selectionKey()) {
+      try {
+        const saved = JSON.parse(recall("sessionStorage", this.selectionKey()));
+        if (saved && saved.spec) {
+          spec = saved.spec;
+          // The rows have changed, so bins that suited the old rows are dropped
+          exact = saved.filters === this.filtersKey();
+          if (!exact) spec = withoutDerivedBins(spec);
+        }
+      } catch (e) {
+        // Nothing usable was remembered
+      }
+    }
+    if (!spec || typeof spec !== "object" || !spec.encoding) return;
+    // If it is one of this page's suggestions, select that card: it has a
+    // reason, and bins that suit the rows now on the page
+    const comparable = (candidate) => canonical(exact ? candidate : withoutDerivedBins(candidate));
+    const wanted = comparable(spec);
+    const index = this.suggestions.findIndex((suggestion) => comparable(suggestion.spec) === wanted);
+    if (index >= 0) {
+      const suggestion = this.suggestions[index];
+      this.open({ ...suggestion, spec: clone(suggestion.spec), card: this.cards[index] });
+    } else {
+      this.open({ spec, title: "", reason: "" });
+    }
   }
 
   statusText(profile) {
@@ -267,6 +340,7 @@ class ChartsPanel {
       h("span", { class: "dc-card-title" }, "Build a chart"),
       h("span", { class: "dc-card-reason" }, "Pick a chart type and columns yourself")
     );
+    this.cards = cards;
     this.strip.replaceChildren(...cards, build);
   }
 
@@ -385,6 +459,7 @@ class ChartsPanel {
 
   close() {
     this.current = null;
+    this.rememberSelection(null);
     this.view.hidden = true;
     this.view.replaceChildren();
     for (const card of this.strip.querySelectorAll(".dc-card")) card.setAttribute("aria-pressed", "false");
@@ -398,6 +473,7 @@ class ChartsPanel {
     const requestId = ++this.requestId;
     // The spec lives in the URL fragment, so a chart can be linked to
     history.replaceState(null, "", FRAGMENT + encodeURIComponent(JSON.stringify(chart.spec)));
+    this.rememberSelection(chart.spec);
     // While data reloads the previous chart stays, dimmed: no layout jump
     this.chartEl.classList.add("dc-loading");
     const holder = h("div", {});

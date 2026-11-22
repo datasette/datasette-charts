@@ -41,6 +41,8 @@ Charts never fetch every row. Each one compiles to a SQL query that returns a sm
 
 On a filtered table page the charts cover the rows the page shows. Column filters such as `?state=CA` and `?price__gt=5`, `?_search=`, `?_where=` and `?_through=` all apply, and so does anything you click in a facet. The suggestions are worked out again for the filtered rows, so a column that the filter has narrowed to a single value is no longer suggested.
 
+The chart you select stays selected as you filter, facet, sort and page through a table: each new page opens with the same chart, now drawn from that page's rows. Close the chart to stop it coming back. This is remembered per table, in the browser tab.
+
 ### Chart types
 
 | Type | Shows | Suggested when |

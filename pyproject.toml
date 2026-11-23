@@ -10,7 +10,7 @@ classifiers=[
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "datasette"
+    "datasette>=1.0a44"
 ]
 
 [dependency-groups]
@@ -42,4 +42,3 @@ datasette_charts = ["static/*", "static/*/*"]
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
-

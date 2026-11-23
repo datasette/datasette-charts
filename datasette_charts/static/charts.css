@@ -300,3 +300,16 @@
   gap: 0.4rem;
   color: var(--dc-muted);
 }
+
+/* <datasette-chart>: one chart on its own, embedded in another page */
+datasette-chart {
+  display: block;
+  margin: 0.5rem 0;
+}
+datasette-chart > .dc-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+datasette-chart > .dc-title:empty {
+  display: none;
+}

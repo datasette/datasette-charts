@@ -59,6 +59,14 @@ def register_routes():
 
 
 @hookimpl
+def register_agent_tools(datasette):
+    # A datasette-agent hook, so this is only called when that is installed
+    from .agent_tools import get_agent_tools
+
+    return get_agent_tools(datasette)
+
+
+@hookimpl
 def register_commands(cli):
     from .cli import register
 

@@ -5,69 +5,13 @@
 // Suggestions and the builder both produce specs in the chart DSL, and the
 // server only ever compiles specs.
 
-import { themeFor } from "./renderers/common.js";
+import { count, dataTable, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
 const SELECTED_PREFIX = "datasette-charts:selected:";
 const FRAGMENT = "#chart=";
-const THUMBNAIL = { width: 208, height: 112 };
-const FULL_HEIGHT = 340;
-const TABLE_ROWS = 500;
 
 // --- Small helpers ------------------------------------------------------------
-
-// Text always goes in as text nodes: titles, reasons and column names are data
-function h(tag, attrs, ...children) {
-  const el = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs || {})) {
-    if (value === false || value === null || value === undefined) continue;
-    if (key === "class") el.className = value;
-    else if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
-    else if (value === true) el.setAttribute(key, "");
-    else el.setAttribute(key, value);
-  }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    el.append(child.nodeType ? child : document.createTextNode(String(child)));
-  }
-  return el;
-}
-
-const scripts = new Map();
-function loadScript(url) {
-  if (!scripts.has(url)) {
-    scripts.set(
-      url,
-      new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = url;
-        script.onload = resolve;
-        script.onerror = () => reject(new Error(`Could not load ${url}`));
-        document.head.append(script);
-      })
-    );
-  }
-  return scripts.get(url);
-}
-
-// Observable Plot and D3 are only loaded when a chart is about to be drawn
-async function loadPlot(urls) {
-  if (!(window.Plot && window.d3)) {
-    await loadScript(urls.d3);
-    await loadScript(urls.plot);
-  }
-  return { Plot: window.Plot, d3: window.d3 };
-}
-
-async function getJSON(url, params) {
-  const query = params ? "?" + new URLSearchParams(params) : "";
-  try {
-    const response = await fetch(url + query, { headers: { Accept: "application/json" } });
-    return await response.json();
-  } catch (e) {
-    return { ok: false, error: "The request failed" };
-  }
-}
 
 // Runs at most `limit` tasks at once: SQL threads are scarce
 class Queue {
@@ -91,11 +35,6 @@ class Queue {
       });
     }
   }
-}
-
-function errorMessage(result) {
-  if (result.error === "timeout") return "This took too long to work out.";
-  return result.error || "Something went wrong";
 }
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -137,7 +76,6 @@ function withoutDerivedBins(spec) {
   }
   return copy;
 }
-const count = (n, noun) => `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 
 // --- The panel ----------------------------------------------------------------
 
@@ -376,39 +314,8 @@ class ChartsPanel {
 
   // --- Drawing ---
 
-  async draw(el, spec, size, measureFrom) {
-    const result = await getJSON(this.urls.data, {
-      source: JSON.stringify(this.source),
-      spec: JSON.stringify(spec),
-      size,
-    });
-    if (!result.ok) return result;
-    const type = this.types[spec.type];
-    try {
-      const [{ Plot, d3 }, renderer] = await Promise.all([loadPlot(this.urls), import(type.js_url)]);
-      const thumbnail = size === "thumbnail";
-      const box = measureFrom || el;
-      const width = thumbnail ? THUMBNAIL.width : Math.max(320, Math.floor(box.clientWidth));
-      await renderer.render(el, {
-        spec,
-        rows: result.rows,
-        columns: result.columns,
-        data: result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]]))),
-        meta: result.meta || {},
-        size,
-        width,
-        height: thumbnail ? THUMBNAIL.height : FULL_HEIGHT,
-        Plot,
-        d3,
-        theme: themeFor(box),
-        urls: this.urls,
-        loadScript,
-      });
-    } catch (e) {
-      console.error("datasette-charts could not draw a chart", e);
-      return { ok: false, error: "This chart could not be drawn" };
-    }
-    return result;
+  draw(el, spec, size, measureFrom) {
+    return drawChart(el, { urls: this.urls, types: this.types, source: this.source, spec, size, measureFrom });
   }
 
   // --- Chart view ---
@@ -504,40 +411,13 @@ class ChartsPanel {
     this.reasonEl.textContent = chart.reason || "";
     this.chartEl.setAttribute("aria-label", [result.title, chart.reason].filter(Boolean).join(". "));
     this.noteEl.classList.remove("dc-error");
-    this.noteEl.textContent = result.truncated
-      ? `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`
-      : "";
+    this.noteEl.textContent = truncationNote(result);
     this.renderLinks(result);
     this.noteResolved(result.meta || {});
   }
 
   renderLinks(result) {
-    // The aggregated rows behind the chart, as a table: nothing in the chart
-    // is only reachable by hovering
-    const table = h("details", { class: "dc-data" }, h("summary", {}, `Data (${count(result.rows.length, "row")})`));
-    table.addEventListener(
-      "toggle",
-      () => {
-        const rows = result.rows.slice(0, TABLE_ROWS);
-        table.append(
-          h(
-            "div",
-            { class: "dc-data-scroll" },
-            h(
-              "table",
-              {},
-              h("thead", {}, h("tr", {}, result.columns.map((name) => h("th", { scope: "col" }, name)))),
-              h(
-                "tbody",
-                {},
-                rows.map((row) => h("tr", {}, row.map((value) => h("td", {}, value === null ? "" : value))))
-              )
-            )
-          )
-        );
-      },
-      { once: true }
-    );
+    const table = dataTable(result);
     const links = [];
     if (result.sql_url) links.push(h("a", { href: result.sql_url }, "View and edit this chart's SQL"));
     links.push(

@@ -39,11 +39,34 @@ class ChartsError(Exception):
         self.errors = errors
 
 
-def _error(message, status=400, errors=None) -> Response:
+# The errors these endpoints expect. Anything else is a bug and propagates.
+EXPECTED_ERRORS = (
+    ChartsError,
+    ProfileTimeout,
+    QueryInterrupted,
+    ProfileError,
+    SpecError,
+    sqlite3.OperationalError,
+    sqlite3.DatabaseError,
+)
+
+
+def error_body(e: Exception) -> tuple:
+    "The JSON body and HTTP status for one of EXPECTED_ERRORS"
+    status, errors = 400, None
+    if isinstance(e, ChartsError):
+        message, status, errors = e.message, e.status, e.errors
+    elif isinstance(e, (ProfileTimeout, QueryInterrupted)):
+        # What the UI should offer next is an open question (spec section 19)
+        message = "timeout"
+    elif isinstance(e, SpecError):
+        message, errors = str(e), [str(e)]
+    else:
+        message = str(e)
     body = {"ok": False, "error": message}
     if errors:
         body["errors"] = errors
-    return Response.json(body, status=status)
+    return body, status
 
 
 def _json_view(fn):
@@ -52,17 +75,9 @@ def _json_view(fn):
     async def view(datasette, request):
         try:
             return await fn(datasette, request)
-        except ChartsError as e:
-            return _error(e.message, e.status, e.errors)
-        except (ProfileTimeout, QueryInterrupted):
-            # What the UI should offer next is an open question (spec section 19)
-            return _error("timeout", 400)
-        except ProfileError as e:
-            return _error(str(e), 400)
-        except SpecError as e:
-            return _error(str(e), 400, [str(e)])
-        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
-            return _error(str(e), 400)
+        except EXPECTED_ERRORS as e:
+            body, status = error_body(e)
+            return Response.json(body, status=status)
 
     return view
 
@@ -255,28 +270,33 @@ async def chart_types_json(datasette, request):
     )
 
 
+async def suggestions_body(datasette, source: Source, debug=False, refresh=False):
+    "Ranked suggestions for a source that has already been resolved"
+    config = get_config(datasette)
+    profile = await get_profile(datasette, source, config, refresh=refresh)
+    suggestions = engine.suggest(
+        profile, engine.get_chart_types(datasette), config, debug=debug
+    )
+    return {
+        "ok": True,
+        "source": source.to_dict(),
+        "profile": profile.summary(),
+        "columns": [_column_summary(column) for column in profile.columns],
+        "suggestions": suggestions,
+    }
+
+
 @_json_view
 async def suggest_json(datasette, request):
     db = _get_database(datasette, request)
     source = await _source_from_request(datasette, request, db)
-    config = get_config(datasette)
-    profile = await get_profile(
-        datasette, source, config, refresh=bool(request.args.get("_refresh"))
-    )
-    suggestions = engine.suggest(
-        profile,
-        engine.get_chart_types(datasette),
-        config,
-        debug=bool(request.args.get("_debug")),
-    )
     return Response.json(
-        {
-            "ok": True,
-            "source": source.to_dict(),
-            "profile": profile.summary(),
-            "columns": [_column_summary(column) for column in profile.columns],
-            "suggestions": suggestions,
-        }
+        await suggestions_body(
+            datasette,
+            source,
+            debug=bool(request.args.get("_debug")),
+            refresh=bool(request.args.get("_refresh")),
+        )
     )
 
 
@@ -348,6 +368,11 @@ async def data_json(datasette, request):
     size = request.args.get("size") or "full"
     if size not in SIZES:
         raise ChartsError("size must be thumbnail or full")
+    return Response.json(await chart_body(datasette, request, db, source, spec))
+
+
+async def chart_body(datasette, request, db, source: Source, spec) -> dict:
+    "The rows for one chart of a source that has already been resolved"
     config = get_config(datasette)
     chart_types = engine.get_chart_types(datasette)
 
@@ -392,7 +417,7 @@ async def data_json(datasette, request):
             datasette.urls.database(db.name),
             urllib.parse.urlencode({"sql": compiled.sql, **compiled.params}),
         )
-    return Response.json(body)
+    return body
 
 
 ROUTES = [

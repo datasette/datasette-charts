@@ -126,12 +126,16 @@ class ChartsPanel {
     });
     this.root.replaceChildren(this.panel);
 
-    // "Chart this data" in the actions menu links to the panel
+    // "Chart this data" in the actions menu links to the panel. A link to
+    // a chart on this same page changes only the fragment, so the page
+    // does not load again: open that chart here.
     window.addEventListener("hashchange", () => {
       if (location.hash === `#${this.root.id}`) {
         this.keepOpen = true;
         this.panel.open = true;
         this.root.scrollIntoView({ block: "start" });
+      } else if (location.hash.startsWith(FRAGMENT)) {
+        this.openLinkedChart();
       }
     });
     let resizeTimer = null;
@@ -194,15 +198,40 @@ class ChartsPanel {
     remember("sessionStorage", key, spec ? JSON.stringify({ spec, filters: this.filtersKey() }) : null);
   }
 
+  // The spec in a #chart= fragment, or null
+  linkedSpec() {
+    if (!location.hash.startsWith(FRAGMENT)) return null;
+    try {
+      return JSON.parse(decodeURIComponent(location.hash.slice(FRAGMENT.length)));
+    } catch (e) {
+      return null; // A fragment that is not a spec is ignored
+    }
+  }
+
+  openLinkedChart() {
+    const spec = this.linkedSpec();
+    if (!spec) return;
+    // Until load() finishes there is nothing to open: it opens the linked
+    // chart itself. Opening the panel starts load() if it has not started.
+    if (!this.panel.open) this.panel.open = true;
+    if (!this.types) return;
+    if (!this.current || canonical(spec) !== canonical(this.current.spec)) this.openInitialChart();
+    else this.scrollToView();
+  }
+
+  // Someone who followed a link to a chart sees that chart at the top of
+  // the window. Only this page scrolls, not a page it is framed in.
+  scrollToView() {
+    const top = this.view.getBoundingClientRect().top + window.scrollY - 16;
+    window.scrollTo({ top: Math.max(0, top) });
+  }
+
   openInitialChart() {
     let spec = null;
     let exact = true;
-    if (location.hash.startsWith(FRAGMENT)) {
-      try {
-        spec = JSON.parse(decodeURIComponent(location.hash.slice(FRAGMENT.length)));
-      } catch (e) {
-        // A fragment that is not a spec is ignored
-      }
+    const linked = location.hash.startsWith(FRAGMENT);
+    if (linked) {
+      spec = this.linkedSpec();
     } else if (this.selectionKey()) {
       try {
         const saved = JSON.parse(recall("sessionStorage", this.selectionKey()));
@@ -228,6 +257,7 @@ class ChartsPanel {
     } else {
       this.open({ spec, title: "", reason: "" });
     }
+    if (linked) this.scrollToView();
   }
 
   statusText(profile) {

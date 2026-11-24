@@ -1,6 +1,6 @@
 [project]
 name = "datasette-charts"
-version = "0.2a0"
+version = "0.2a1"
 description = "A charting plugin for Datasette"
 readme = "README.md"
 authors = [{name = "Datasette"}]

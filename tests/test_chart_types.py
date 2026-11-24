@@ -71,11 +71,55 @@ async def test_map_and_panel_suggestions_come_first(ds):
         await profile_source(ds, table("places")), chart_types, config
     )
     assert places[0]["spec"]["type"] == "map"
-    # One row per sensor per day: the reading over time is the chart
+    # One row per sensor per day: the reading over time, one line per
+    # sensor, is the chart
     readings = engine.suggest(
         await profile_source(ds, table("readings")), chart_types, config
     )
-    assert readings[0]["title"] == "Average reading per week of day"
+    assert readings[0]["title"] == "Average reading per week of day by sensor"
+
+
+@pytest.mark.asyncio
+async def test_panel_suggestions_without_a_primary_key(ds):
+    "A query has no primary key, but one row per sensor per day still shows"
+    chart_types = engine.get_chart_types(ds)
+    config = get_config(ds)
+    source = Source(
+        database="shop",
+        kind="query",
+        sql="select day, sensor, reading from readings",
+    )
+    suggestions = engine.suggest(await profile_source(ds, source), chart_types, config)
+    assert suggestions[0]["title"] == "Average reading per week of day by sensor"
+
+
+@pytest.mark.asyncio
+async def test_panel_suggestions_for_one_row_per_decade(ds):
+    "Issue #2: a summary with one row per decade per type"
+    chart_types = engine.get_chart_types(ds)
+    config = get_config(ds)
+    source = Source(
+        database="shop",
+        kind="query",
+        sql="""
+        with recursive decades(n) as (
+          select 1800 union all select n + 10 from decades where n < 2020
+        )
+        select printf('%04d-01-01', n) as decade, type, (n - 1800) / 10.0 + length(type) as pct
+        from decades, (select 'rep' as type union all select 'sen')
+        """,
+    )
+    suggestions = engine.suggest(await profile_source(ds, source), chart_types, config)
+    titles = [s["title"] for s in suggestions]
+    line = [s for s in suggestions if s["spec"]["type"] == "line"]
+    # One line per type, rather than the two averaged together or a count
+    # of the same 2 rows per decade
+    assert line[0]["title"] == "Average pct per year of decade by type"
+    counts = [t for t in titles if t.startswith("Rows per")]
+    assert all(
+        titles.index(t) > titles.index("Average pct per year of decade by type")
+        for t in counts
+    )
 
 
 @pytest.mark.asyncio

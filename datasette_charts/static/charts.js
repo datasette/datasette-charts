@@ -99,17 +99,27 @@ class ChartsPanel {
 
   build() {
     const stored = recall("localStorage", COLLAPSED_KEY);
-    // Arriving on a link to a chart, or to the panel itself, opens the panel
-    const linked = location.hash.startsWith(FRAGMENT) || location.hash === `#${this.root.id}`;
-    const open = linked || (stored === null ? this.bootstrap.auto_suggest : stored !== "1");
+    // The panel holds the suggestions. An open chart sits below it, and shows
+    // whether or not the suggestions are collapsed. A link to the panel
+    // itself opens it. Someone who followed a link to a chart sees that chart
+    // without the suggestions above it, on that visit only: the choice they
+    // made earlier is still remembered. Reloading the page, or going back to
+    // it, is not following a link.
+    const navigation = performance.getEntriesByType("navigation")[0];
+    const followedChartLink =
+      location.hash.startsWith(FRAGMENT) && (!navigation || navigation.type === "navigate");
+    const open =
+      location.hash === `#${this.root.id}` ||
+      (!followedChartLink && (stored === null ? this.bootstrap.auto_suggest : stored !== "1"));
     // Stay open with nothing suggested only if the person asked for the panel
     this.keepOpen = location.hash === `#${this.root.id}`;
 
     this.status = h("span", { class: "dc-status" });
     this.strip = h("div", { class: "dc-strip" });
     this.view = h("div", { class: "dc-view", hidden: true });
-    const summary = h("summary", {}, h("span", { class: "dc-heading" }, "Charts"), this.status);
-    this.panel = h("details", { class: "dc-panel", open }, summary, this.strip, this.view);
+    this.heading = h("span", { class: "dc-heading" }, "Suggested charts");
+    const summary = h("summary", {}, this.heading, this.status);
+    this.panel = h("details", { class: "dc-panel", open }, summary, this.strip);
     // Only a click or key press on the summary is the person's own choice.
     // The panel also opens and closes itself, and that is not remembered.
     let byUser = false;
@@ -124,7 +134,7 @@ class ChartsPanel {
       }
       if (this.panel.open) this.load();
     });
-    this.root.replaceChildren(this.panel);
+    this.root.replaceChildren(this.panel, this.view);
 
     // A link to the panel opens it. A link to
     // a chart on this same page changes only the fragment, so the page
@@ -143,7 +153,9 @@ class ChartsPanel {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => this.current && this.drawCurrent(), 200);
     });
-    if (open) this.load();
+    // A chart to show needs the chart types and columns, even with the
+    // suggestions collapsed
+    if (open || this.linkedSpec() || this.savedSelection()) this.load();
   }
 
   async load() {
@@ -165,6 +177,8 @@ class ChartsPanel {
     this.vocabulary = types;
     this.columns = suggested.columns;
     this.suggestions = suggested.suggestions;
+    // With nothing suggested the panel only offers "Build a chart"
+    if (!this.suggestions.length) this.heading.textContent = "Charts";
     this.source = suggested.source;
     this.status.textContent = this.statusText(suggested.profile);
     this.status.title = (suggested.profile.notes || []).join("\n");
@@ -198,6 +212,18 @@ class ChartsPanel {
     remember("sessionStorage", key, spec ? JSON.stringify({ spec, filters: this.filtersKey() }) : null);
   }
 
+  // The chart selected earlier for this table, {spec, filters}, or null
+  savedSelection() {
+    const key = this.selectionKey();
+    if (!key) return null;
+    try {
+      const saved = JSON.parse(recall("sessionStorage", key));
+      return saved && saved.spec ? saved : null;
+    } catch (e) {
+      return null; // Nothing usable was remembered
+    }
+  }
+
   // The spec in a #chart= fragment, or null
   linkedSpec() {
     if (!location.hash.startsWith(FRAGMENT)) return null;
@@ -212,8 +238,8 @@ class ChartsPanel {
     const spec = this.linkedSpec();
     if (!spec) return;
     // Until load() finishes there is nothing to open: it opens the linked
-    // chart itself. Opening the panel starts load() if it has not started.
-    if (!this.panel.open) this.panel.open = true;
+    // chart itself
+    this.load();
     if (!this.types) return;
     if (!this.current || canonical(spec) !== canonical(this.current.spec)) this.openInitialChart();
     else this.scrollToView();
@@ -232,17 +258,13 @@ class ChartsPanel {
     const linked = location.hash.startsWith(FRAGMENT);
     if (linked) {
       spec = this.linkedSpec();
-    } else if (this.selectionKey()) {
-      try {
-        const saved = JSON.parse(recall("sessionStorage", this.selectionKey()));
-        if (saved && saved.spec) {
-          spec = saved.spec;
-          // The rows have changed, so bins that suited the old rows are dropped
-          exact = saved.filters === this.filtersKey();
-          if (!exact) spec = withoutDerivedBins(spec);
-        }
-      } catch (e) {
-        // Nothing usable was remembered
+    } else {
+      const saved = this.savedSelection();
+      if (saved) {
+        spec = saved.spec;
+        // The rows have changed, so bins that suited the old rows are dropped
+        exact = saved.filters === this.filtersKey();
+        if (!exact) spec = withoutDerivedBins(spec);
       }
     }
     if (!spec || typeof spec !== "object" || !spec.encoding) return;

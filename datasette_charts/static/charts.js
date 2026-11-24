@@ -712,6 +712,11 @@ class ChartsPanel {
 
 for (const root of document.querySelectorAll(".datasette-charts[data-bootstrap]")) {
   try {
+    // A table page says which rows it shows ("4,235 rows where country =
+    // CHN") below where top_table puts the panel. The charts are of those
+    // rows, so the panel goes after that line.
+    const summary = document.querySelector("h3.table-summary");
+    if (summary) summary.after(root);
     new ChartsPanel(root, JSON.parse(root.dataset.bootstrap));
   } catch (e) {
     console.error("datasette-charts could not start", e);

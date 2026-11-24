@@ -20,7 +20,7 @@ import json
 import urllib.parse
 
 from datasette.utils.asgi import Request
-from markupsafe import Markup, escape
+from markupsafe import Markup
 
 from . import views
 from .config import PLUGIN_NAME

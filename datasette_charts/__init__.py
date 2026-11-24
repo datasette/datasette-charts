@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from datasette import hookimpl
+from markupsafe import Markup, escape
 
 NEEDS_NEWER_DATASETTE = (
     "datasette-charts needs a Datasette newer than 1.0a43 (commit 56e02c1 or"
@@ -16,9 +17,8 @@ try:
     from datasette.utils import named_parameters
 except ImportError as e:  # a much older Datasette
     raise ImportError(NEEDS_NEWER_DATASETTE) from e
-from markupsafe import Markup, escape
 
-from . import hookspecs
+from . import hookspecs  # noqa: E402
 
 pm.add_hookspecs(hookspecs)
 

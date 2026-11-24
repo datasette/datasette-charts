@@ -126,7 +126,7 @@ class ChartsPanel {
     });
     this.root.replaceChildren(this.panel);
 
-    // "Chart this data" in the actions menu links to the panel. A link to
+    // A link to the panel opens it. A link to
     // a chart on this same page changes only the fragment, so the page
     // does not load again: open that chart here.
     window.addEventListener("hashchange", () => {

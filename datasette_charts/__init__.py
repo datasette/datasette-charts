@@ -208,31 +208,3 @@ def top_stored_query(datasette, request, database, query_name):
 
     return inner
 
-
-def _chart_action():
-    return [
-        {
-            "href": f"#{PANEL_ID}",
-            "label": "Chart this data",
-            "description": "Suggested charts, and a builder for your own",
-        }
-    ]
-
-
-@hookimpl
-def table_actions(datasette, actor, database, table, request):
-    return _chart_action()
-
-
-@hookimpl
-def view_actions(datasette, actor, database, view, request):
-    return _chart_action()
-
-
-@hookimpl
-def query_actions(datasette, actor, database, query_name, request, sql, params):
-    if not sql and not query_name:
-        return []
-    if sql and _is_chart_sql(sql):
-        return []
-    return _chart_action()

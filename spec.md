@@ -929,7 +929,7 @@ Notes:
 
 ## 13. User interface
 
-**Entry points.** The `top_table`, `top_query` and `top_stored_query` hooks each emit a container element and a small JSON bootstrap (the source descriptor and endpoint URLs). The plugin's JavaScript, added with `extra_js_urls`, takes over from there. `table_actions` and `query_actions` add a "Chart this data" menu item. Using the plugin's own bootstrap avoids depending on core's undocumented `window._datasetteTableData` and `window._datasetteQueryData` globals.
+**Entry points.** The `top_table`, `top_query` and `top_stored_query` hooks each emit a container element and a small JSON bootstrap (the source descriptor and endpoint URLs). The plugin's JavaScript, added with `extra_js_urls`, takes over from there. Using the plugin's own bootstrap avoids depending on core's undocumented `window._datasetteTableData` and `window._datasetteQueryData` globals.
 
 **Suggestions strip.** A row of cards, in rank order. Each card shows:
 
@@ -1099,7 +1099,7 @@ Checked against commit `56e02c1`.
 | Table counts are capped at 10,000 | `datasette/database.py:102`, `:912` |
 | `PRAGMA schema_version` is tracked in `catalog_databases` | `datasette/database.py:1259`, `datasette/utils/internal_db.py:32` |
 | Column types: base class, built-ins (`url`, `email`, `json`, `textarea`), hook | `datasette/column_types.py`, `datasette/default_column_types.py`, `datasette/hookspecs.py:92` |
-| `top_table`, `top_query`, `top_stored_query`, `table_actions`, `query_actions` | `datasette/hookspecs.py:170-235` |
+| `top_table`, `top_query`, `top_stored_query` | `datasette/hookspecs.py:170-235` |
 | Plugins can define their own hooks with `pm.add_hookspecs` | `docs/writing_plugins.rst:403-427` |
 | `datasette.allowed(action=, resource=, actor=)`; `TableResource`, `DatabaseResource`, `QueryResource` | `datasette/app.py:2128`, `datasette/resources.py` |
 | Actions `view-table`, `execute-sql`, `view-query` | `datasette/default_actions.py` |

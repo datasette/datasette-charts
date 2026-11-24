@@ -355,7 +355,6 @@ async def test_no_charts_for_a_charts_own_sql(db_path):
         page = await ds.client.get(path)
         assert page.status_code == 200
         assert 'id="datasette-charts"' not in page.text
-        assert "Chart this data" not in page.text
 
 
 def bootstrap_from(html):

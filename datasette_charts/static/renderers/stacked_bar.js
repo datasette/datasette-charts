@@ -1,4 +1,5 @@
 import {
+  TIP,
   basePlot,
   mount,
   fmt,
@@ -58,7 +59,7 @@ export function render(el, ctx) {
   const shown = temporal ? items : items.filter((d) => visibleKeys.includes(d.key));
   const tip = thumbnail
     ? {}
-    : { title: (d) => `${d.key}\n${fmt(d.value)}  ${d.series}`, tip: true };
+    : { title: (d) => `${d.key}\n${fmt(d.value)}  ${d.series}`, tip: TIP };
   const options = { color: { domain, range, legend: !thumbnail } };
 
   if (temporal) {

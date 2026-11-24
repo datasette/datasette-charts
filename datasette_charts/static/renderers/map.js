@@ -1,4 +1,4 @@
-import { basePlot, mount, fmt, isThumbnail } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail } from "./common.js";
 
 // How to draw the map, and where a basemap comes from, is an open question
 // in the spec. This first version draws points over a coarse world land
@@ -82,7 +82,7 @@ export async function render(el, ctx) {
       fillOpacity: 0.6,
       stroke: theme.surface,
       strokeWidth: thumbnail ? 0 : 0.4,
-      ...(thumbnail ? {} : { title, tip: true }),
+      ...(thumbnail ? {} : { title, tip: TIP }),
     })
   );
 

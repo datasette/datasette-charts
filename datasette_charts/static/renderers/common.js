@@ -41,6 +41,9 @@ function parseColor(value) {
 
 // The palette is picked from the surface the chart actually sits on, so it
 // follows whatever theme the page uses, not just the OS setting.
+// Tooltips: a little more space between lines than Plot gives them
+export const TIP = { lineHeight: 1.3 };
+
 export function themeFor(el) {
   let surface = { r: 255, g: 255, b: 255 };
   for (let node = el; node && node.nodeType === 1; node = node.parentElement) {

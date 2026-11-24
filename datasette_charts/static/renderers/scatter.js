@@ -1,4 +1,4 @@
-import { basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
 
 // meta.mode is "points" (rows: x, y) for small sources, or "bins"
 // (rows: bx, by, n, with meta.x_bin and meta.y_bin) drawn as a heatmap.
@@ -25,7 +25,7 @@ export function render(el, ctx) {
         // The pointer only has to be closest to a point, not on it
         ...(thumbnail
           ? {}
-          : { title: (d) => `${meta.x}: ${fmt(d.x)}\n${meta.y}: ${fmt(d.y)}`, tip: true }),
+          : { title: (d) => `${meta.x}: ${fmt(d.x)}\n${meta.y}: ${fmt(d.y)}`, tip: TIP }),
       }),
     ];
   } else {
@@ -63,7 +63,7 @@ export function render(el, ctx) {
               title: (d) =>
                 `${fmt(d.n)} ${d.n === 1 ? "row" : "rows"}\n` +
                 `${meta.x}: ${fmt(d.x1)} to ${fmt(d.x2)}\n${meta.y}: ${fmt(d.y1)} to ${fmt(d.y2)}`,
-              tip: true,
+              tip: TIP,
             }),
       }),
     ];

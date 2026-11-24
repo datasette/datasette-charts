@@ -1,4 +1,4 @@
-import { basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
 
 // rows: bucket, n.
 //
@@ -65,7 +65,7 @@ export function render(el, ctx) {
           ry2: thumbnail ? 0 : 2,
           ...(thumbnail
             ? {}
-            : { title: (d) => `${d.label}\n${fmt(d.n)} ${d.n === 1 ? "row" : "rows"}`, tip: true }),
+            : { title: (d) => `${d.label}\n${fmt(d.n)} ${d.n === 1 ? "row" : "rows"}`, tip: TIP }),
         }),
         Plot.ruleY([0], { stroke: theme.muted }),
       ],

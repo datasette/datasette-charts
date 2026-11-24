@@ -1,4 +1,5 @@
 import {
+  TIP,
   basePlot,
   mount,
   fmt,
@@ -36,7 +37,7 @@ export function render(el, ctx) {
       rx2: thumbnail ? 2 : 4,
       insetTop: thumbnail ? 1 : 3,
       insetBottom: thumbnail ? 1 : 3,
-      ...(thumbnail ? {} : { title: (d) => `${d.name}\n${fmt(d.value)}`, tip: true }),
+      ...(thumbnail ? {} : { title: (d) => `${d.name}\n${fmt(d.value)}`, tip: TIP }),
     }),
     Plot.ruleX([0], { stroke: theme.muted }),
   ];

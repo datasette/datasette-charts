@@ -1,4 +1,5 @@
 import {
+  TIP,
   basePlot,
   mount,
   fmt,
@@ -93,6 +94,7 @@ export function render(el, ctx) {
             x: "date",
             y: "value",
             title: (d) => `${fmtBucket(d.date, unit)}\n${fmt(d.value)}`,
+            ...TIP,
           })
         )
       );
@@ -122,7 +124,7 @@ export function render(el, ctx) {
         };
       });
       marks.push(Plot.ruleX(byDate, Plot.pointerX({ x: "date", stroke: theme.muted })));
-      marks.push(Plot.tip(byDate, Plot.pointerX({ x: "date", y: "top", title: (d) => d.text })));
+      marks.push(Plot.tip(byDate, Plot.pointerX({ x: "date", y: "top", title: (d) => d.text, ...TIP })));
     }
   }
 

@@ -45,6 +45,24 @@ UNIT_ADJECTIVES = {
 WEAK_TIME_NAME_TOKENS = {"updated", "modified", "pushed", "synced", "fetched"}
 
 
+def per_time_category(profile, column, categories):
+    """
+    The category with exactly one row per time for each of its values, as
+    in a summary query with no primary key to say so, or None. Counting rows
+    over time then charts nothing but the shape of the summary. (A time that
+    is simply unique says nothing: events with timestamps are unique too.)
+    """
+    times = column.distinct_count
+    rows = column.non_null
+    if profile.basis != "full" or not times or times < 3:
+        return None
+    for category in categories:
+        values = category.distinct_count
+        if values and rows == times * values:
+            return category
+    return None
+
+
 class Line(BuiltinChartType):
     name = "line"
     label = "Line chart"
@@ -110,9 +128,12 @@ class Line(BuiltinChartType):
             base -= null_penalty(column.null_rate, 0.4)
             # One row per entity per date, as in (package, date, downloads):
             # there the measure over time is the chart, not the row count
+            per_category = per_time_category(
+                profile, column, [c for _, c in categories]
+            )
             panel = (
                 len(profile.primary_keys) > 1 and column.name in profile.primary_keys
-            )
+            ) or per_category is not None
             signals = {"buckets": buckets, "unit": unit, "panel": panel}
             span = "{} spans {}; {} buckets give {} points".format(
                 column.name,
@@ -147,7 +168,11 @@ class Line(BuiltinChartType):
                     "column": measures[0].name,
                     "aggregate": default_aggregate(measures[0]),
                 }
-            for i, (quality, category) in enumerate(categories[:2]):
+            splits = categories[:2]
+            if per_category and all(c is not per_category for _, c in splits):
+                splits = [pair for pair in categories if pair[1] is per_category]
+                splits += categories[:1]
+            for i, (quality, category) in enumerate(splits):
                 distinct = category.distinct_count
                 series = {
                     "column": category.name,
@@ -156,6 +181,10 @@ class Line(BuiltinChartType):
                 }
                 score = base - 0.1 - 0.05 * i - (0.04 if distinct > 8 else 0)
                 score -= 0.3 * max(0.0, 0.62 - quality)
+                if category is per_category and distinct <= DEFAULT_SERIES_LIMIT:
+                    # One line per value, each with one point per time: the
+                    # lines are the data, where one line would average them
+                    score = base + 0.1
                 if distinct <= DEFAULT_SERIES_LIMIT:
                     split = f"split by the {distinct} values of {category.name}"
                 else:

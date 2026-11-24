@@ -140,7 +140,7 @@ def top_table(datasette, request, database, table):
 
 def _is_chart_sql(sql: str) -> bool:
     """
-    The SQL behind "View and edit this chart's SQL" uses chart_ parameters.
+    The SQL behind "This chart's SQL" uses chart_ parameters.
     Charting it again would clash with the parameters the new chart adds,
     so pages showing it get no charts.
     """

@@ -208,27 +208,6 @@
   gap: 0.9rem;
   margin-bottom: 0.5rem;
 }
-.dc-data > summary {
-  cursor: pointer;
-  color: var(--dc-muted);
-}
-.dc-data-scroll {
-  max-height: 260px;
-  overflow: auto;
-  margin-top: 0.4rem;
-}
-.dc-data table {
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-.dc-data th,
-.dc-data td {
-  padding: 0.15rem 0.7rem 0.15rem 0;
-  text-align: left;
-  border-bottom: 1px solid var(--dc-line);
-  white-space: nowrap;
-}
-
 /* Manual builder */
 .dc-builder {
   flex: 0 1 230px;

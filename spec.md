@@ -953,7 +953,7 @@ The builder edits the same spec the suggestion produced. Validation errors from 
 
 **Sharing.** The current spec is kept in the URL fragment so a chart can be linked to. Saving charts is out of scope.
 
-**Accessibility.** Each chart has a text alternative made of its title and reason, and a link to the underlying aggregated rows.
+**Accessibility.** Each chart has a text alternative made of its title and reason, and its underlying aggregated rows can be copied as TSV or CSV.
 
 ## 14. Permissions and security
 

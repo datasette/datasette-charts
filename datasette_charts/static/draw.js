@@ -1,11 +1,10 @@
 // datasette-charts: what the Charts panel and <datasette-chart> share.
-// Fetching a chart's rows, drawing them, and the table of the rows behind it.
+// Fetching a chart's rows, drawing them, and copying the rows behind it.
 
 import { themeFor } from "./renderers/common.js";
 
 export const THUMBNAIL = { width: 208, height: 112 };
 export const FULL_HEIGHT = 340;
-const TABLE_ROWS = 500;
 
 // --- Small helpers ------------------------------------------------------------
 
@@ -115,32 +114,50 @@ export function truncationNote(result) {
   return `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`;
 }
 
-// The aggregated rows behind the chart, as a table: nothing in the chart
-// is only reachable by hovering
-export function dataTable(result) {
-  const table = h("details", { class: "dc-data" }, h("summary", {}, `Data (${count(result.rows.length, "row")})`));
-  table.addEventListener(
-    "toggle",
-    () => {
-      const rows = result.rows.slice(0, TABLE_ROWS);
-      table.append(
-        h(
-          "div",
-          { class: "dc-data-scroll" },
-          h(
-            "table",
-            {},
-            h("thead", {}, h("tr", {}, result.columns.map((name) => h("th", { scope: "col" }, name)))),
-            h(
-              "tbody",
-              {},
-              rows.map((row) => h("tr", {}, row.map((value) => h("td", {}, value === null ? "" : value))))
-            )
-          )
-        )
-      );
+// A button that copies text to the clipboard, says whether it worked, then
+// goes back to its own label
+export function copyButton(label, done, getText, failed = "Could not copy") {
+  let timer = null;
+  return h(
+    "button",
+    {
+      type: "button",
+      class: "dc-link",
+      onclick: async (event) => {
+        const button = event.currentTarget;
+        let ok = true;
+        try {
+          await navigator.clipboard.writeText(getText());
+        } catch (e) {
+          ok = false;
+        }
+        button.textContent = ok ? done : failed;
+        clearTimeout(timer);
+        timer = setTimeout(() => (button.textContent = label), ok ? 2000 : 5000);
+      },
     },
-    { once: true }
+    label
   );
-  return table;
+}
+
+function delimited(result, separator) {
+  const cell =
+    separator === "\t"
+      ? // Tabs and line breaks would split a TSV cell, so they become spaces
+        (value) => String(value).replace(/[\t\r\n]+/g, " ")
+      : (value) => {
+          const text = String(value);
+          return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+        };
+  return [result.columns, ...result.rows]
+    .map((row) => row.map((value) => (value === null || value === undefined ? "" : cell(value))).join(separator))
+    .join("\n");
+}
+
+// The aggregated rows behind the chart, ready to paste into a spreadsheet
+export function copyDataButtons(result) {
+  return [
+    copyButton("Copy TSV", "TSV copied", () => delimited(result, "\t")),
+    copyButton("Copy CSV", "CSV copied", () => delimited(result, ",")),
+  ];
 }

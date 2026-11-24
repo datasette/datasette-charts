@@ -5,7 +5,7 @@
 // Suggestions and the builder both produce specs in the chart DSL, and the
 // server only ever compiles specs.
 
-import { count, dataTable, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
 const SELECTED_PREFIX = "datasette-charts:selected:";
@@ -447,28 +447,13 @@ class ChartsPanel {
   }
 
   renderLinks(result) {
-    const table = dataTable(result);
     const links = [];
-    if (result.sql_url) links.push(h("a", { href: result.sql_url }, "View and edit this chart's SQL"));
+    if (result.sql_url) links.push(h("a", { href: result.sql_url }, "This chart's SQL"));
     links.push(
-      h(
-        "button",
-        {
-          type: "button",
-          class: "dc-link",
-          onclick: async (event) => {
-            try {
-              await navigator.clipboard.writeText(location.href);
-              event.target.textContent = "Link copied";
-            } catch (e) {
-              event.target.textContent = "Copy the address from the address bar";
-            }
-          },
-        },
-        "Copy link to this chart"
-      )
+      copyButton("Copy link to this chart", "Link copied", () => location.href, "Copy the address from the address bar"),
+      ...copyDataButtons(result)
     );
-    this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links), table);
+    this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links));
   }
 
   // --- Manual builder ---

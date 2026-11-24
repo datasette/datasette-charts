@@ -16,7 +16,7 @@ from .sources import Source, quote
 AGGREGATES = ("count", "sum", "avg", "min", "max", "count_distinct")
 # Aggregates whose per-group results can be added up into an "Other" bucket
 ADDITIVE_AGGREGATES = ("count", "sum")
-TIME_UNITS = ("year", "quarter", "month", "week", "day", "hour", "minute")
+TIME_UNITS = ("decade", "year", "quarter", "month", "week", "day", "hour", "minute")
 SORTS = ("-value", "value", "key", "-key")
 
 # Approximate seconds per unit, for estimating how many buckets a span gives
@@ -28,6 +28,7 @@ UNIT_SECONDS = {
     "month": 2629800,
     "quarter": 7889400,
     "year": 31557600,
+    "decade": 315576000,
 }
 # The time unit is chosen so the bucket count stays at or under this
 TARGET_TIME_BUCKETS = 100
@@ -130,9 +131,9 @@ def _time_args(column: str, kind: str) -> str:
 def time_units_for(kind: str) -> tuple:
     "The time units that make sense for a temporal kind"
     if kind == "year":
-        return ("year",)
+        return ("decade", "year")
     if kind == "iso_date":
-        return ("year", "quarter", "month", "week", "day")
+        return ("decade", "year", "quarter", "month", "week", "day")
     return TIME_UNITS
 
 
@@ -140,17 +141,21 @@ def time_bucket_sql(column: str, kind: str, unit: str) -> str:
     """
     A bucketing expression for a column, its temporal kind and a time unit.
 
-    Buckets are text labels that sort in time order: 2026, 2026-Q4, 2026-11,
-    2026-11-16 (the Monday, for weeks), 2026-11-22, 2026-11-22T10 and
-    2026-11-22T10:30. A value SQLite cannot parse gives a NULL bucket.
+    Buckets are labels that sort in time order: 2020 (the first year, for
+    decades), 2026, 2026-Q4, 2026-11, 2026-11-16 (the Monday, for weeks),
+    2026-11-22, 2026-11-22T10 and 2026-11-22T10:30. A value SQLite cannot
+    parse gives a NULL bucket.
     """
     if unit not in TIME_UNITS:
         raise SpecError(f"Unknown time unit: {unit}")
     if unit not in time_units_for(kind):
         raise SpecError(f"A {kind} column cannot be bucketed by {unit}")
     if kind == "year":
-        return f"cast({quote(column)} as integer)"
+        year = f"cast({quote(column)} as integer)"
+        return f"({year} / 10) * 10" if unit == "decade" else year
     args = _time_args(column, kind)
+    if unit == "decade":
+        return f"(cast(strftime('%Y', {args}) as integer) / 10) * 10"
     if unit == "year":
         return f"strftime('%Y', {args})"
     if unit == "quarter":
@@ -225,6 +230,13 @@ def choose_time_unit(temporal, target: int = TARGET_TIME_BUCKETS) -> tuple:
         if n <= target:
             return best
     return best  # the coarsest unit, even though it is over the target
+
+
+def per_time_unit(unit: str, column: str) -> str:
+    "'per month of created_at', or just 'per decade' for a column called decade"
+    if column.lower() == unit:
+        return f"per {unit}"
+    return f"per {unit} of {column}"
 
 
 def span_description(earliest: str | None, latest: str | None) -> str:

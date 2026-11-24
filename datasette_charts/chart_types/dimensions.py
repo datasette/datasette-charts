@@ -36,7 +36,8 @@ def temporal_dimension(encoding: dict, profile) -> dict:
     unit = encoding.get("timeUnit")
     if unit is None:
         unit = choose_time_unit(column.temporal)[0] if column.temporal else None
-        unit = unit or time_units_for(kind)[min(2, len(time_units_for(kind)) - 1)]
+        units = time_units_for(kind)
+        unit = unit or ("month" if "month" in units else units[-1])
     return {
         "bucket": time_bucket_sql(name, kind, unit),
         "filter": temporal_filter_sql(name, kind, origin),

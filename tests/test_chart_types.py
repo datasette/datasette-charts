@@ -113,12 +113,13 @@ async def test_panel_suggestions_for_one_row_per_decade(ds):
     titles = [s["title"] for s in suggestions]
     line = [s for s in suggestions if s["spec"]["type"] == "line"]
     # One line per type, rather than the two averaged together or a count
-    # of the same 2 rows per decade
-    assert line[0]["title"] == "Average pct per year of decade by type"
+    # of the same 2 rows per decade. 220 years in yearly buckets is too many
+    # for 46 rows, so the buckets are decades.
+    assert line[0]["title"] == "Average pct per decade by type"
+    assert line[0]["spec"]["encoding"]["x"]["timeUnit"] == "decade"
     counts = [t for t in titles if t.startswith("Rows per")]
     assert all(
-        titles.index(t) > titles.index("Average pct per year of decade by type")
-        for t in counts
+        titles.index(t) > titles.index("Average pct per decade by type") for t in counts
     )
 
 
@@ -389,6 +390,9 @@ def test_log_edges():
         ("unix_seconds", 1795364019, "day", "2026-11-22"),
         ("unix_ms", 1795364019670, "hour", "2026-11-22T16"),
         ("year", 2026, "year", 2026),
+        ("year", 2026, "decade", 2020),
+        ("iso_date", "1999-12-31", "decade", 1990),
+        ("unix_seconds", 1795364019, "decade", 2020),
         # Offsets are converted to UTC by SQLite
         ("iso_datetime", "2026-11-22 23:30:00-08:00", "day", "2026-11-23"),
         # A value SQLite cannot parse gives a NULL bucket, which charts drop
@@ -405,7 +409,7 @@ def test_time_buckets(kind, value, unit, expected):
     assert conn.execute(sql).fetchone()[0] == expected
 
 
-def test_year_columns_only_bucket_by_year():
+def test_year_columns_bucket_by_year_or_decade():
     with pytest.raises(SpecError):
         time_bucket_sql("c", "year", "month")
     with pytest.raises(SpecError):

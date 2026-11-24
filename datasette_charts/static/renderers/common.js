@@ -203,6 +203,8 @@ export function fmtBucket(date, unit) {
 }
 
 // Every bucket from the first to the last, so a gap can be shown as a gap.
+// Data that comes at a regular step of several buckets, like one row per
+// decade bucketed by year, keeps its own step: only a missing step is a gap.
 // Returns null when there would be too many to be worth filling.
 export function allBuckets(dates, unit, max = 2000) {
   if (!dates.length) return [];
@@ -213,5 +215,14 @@ export function allBuckets(dates, unit, max = 2000) {
     out.push(date);
     if (out.length > max) return null;
   }
-  return out;
+  const present = new Set(times);
+  let step = 0;
+  out.forEach((date, i) => {
+    if (present.has(date.getTime())) step = gcd(step, i);
+  });
+  return step > 1 ? out.filter((date, i) => i % step === 0) : out;
+}
+
+function gcd(a, b) {
+  return b ? gcd(b, a % b) : a;
 }

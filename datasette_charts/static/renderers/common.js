@@ -161,7 +161,7 @@ export function truncate(text, max) {
 export function bucketToDate(bucket, unit) {
   const text = String(bucket);
   let match;
-  if (unit === "year") return new Date(Date.UTC(parseInt(text, 10), 0, 1));
+  if (unit === "year" || unit === "decade") return new Date(Date.UTC(parseInt(text, 10), 0, 1));
   if (unit === "quarter" && (match = /^(-?\d+)-Q(\d)$/.exec(text))) {
     return new Date(Date.UTC(+match[1], (+match[2] - 1) * 3, 1));
   }
@@ -176,7 +176,8 @@ export function bucketToDate(bucket, unit) {
 
 export function stepDate(date, unit) {
   const next = new Date(date.getTime());
-  if (unit === "year") next.setUTCFullYear(next.getUTCFullYear() + 1);
+  if (unit === "decade") next.setUTCFullYear(next.getUTCFullYear() + 10);
+  else if (unit === "year") next.setUTCFullYear(next.getUTCFullYear() + 1);
   else if (unit === "quarter") next.setUTCMonth(next.getUTCMonth() + 3);
   else if (unit === "month") next.setUTCMonth(next.getUTCMonth() + 1);
   else if (unit === "week") next.setUTCDate(next.getUTCDate() + 7);
@@ -193,6 +194,7 @@ export function fmtBucket(date, unit) {
   const m = date.getUTCMonth();
   const d = date.getUTCDate();
   const pad = (n) => String(n).padStart(2, "0");
+  if (unit === "decade") return `${y}s`;
   if (unit === "year") return String(y);
   if (unit === "quarter") return `Q${Math.floor(m / 3) + 1} ${y}`;
   if (unit === "month") return `${MONTHS[m]} ${y}`;

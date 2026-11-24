@@ -76,7 +76,7 @@ def test_valid_specs():
                 x={"column": "created_at", "timeUnit": "fortnight"},
                 y={"aggregate": "count"},
             ),
-            "x: timeUnit must be one of year, quarter, month, week, day, hour, minute",
+            "x: timeUnit must be one of decade, year, quarter, month, week, day, hour, minute",
         ),
         (
             line(

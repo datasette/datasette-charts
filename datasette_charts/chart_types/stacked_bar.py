@@ -8,6 +8,7 @@ from ..sqlgen import (
     measure_sql,
     merge_params,
     not_materialized,
+    per_time_unit,
     rank_over,
 )
 from .bar import label_sql
@@ -216,10 +217,9 @@ class StackedBar(BuiltinChartType):
         encoding = spec["encoding"]
         x = encoding["x"]
         if x.get("timeUnit"):
-            return "{} per {} of {} by {}".format(
+            return "{} {} by {}".format(
                 aggregate_title(encoding.get("y")),
-                x["timeUnit"],
-                x["column"],
+                per_time_unit(x["timeUnit"], x["column"]),
                 encoding["series"]["column"],
             )
         return "{} by {} and {}".format(

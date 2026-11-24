@@ -9,6 +9,7 @@ from ..sqlgen import (
     aggregate_title,
     choose_time_unit,
     measure_sql,
+    per_time_unit,
     merge_params,
     not_materialized,
     rank_over,
@@ -33,6 +34,7 @@ DEFAULT_SERIES_LIMIT = 5
 # Aim for at least this many rows in each time bucket
 ROWS_PER_BUCKET = 5
 UNIT_ADJECTIVES = {
+    "decade": "decade",
     "year": "yearly",
     "quarter": "quarterly",
     "month": "monthly",
@@ -106,11 +108,20 @@ class Line(BuiltinChartType):
         for column in profile.columns:
             if column.role != "temporal" or not column.temporal:
                 continue
-            # Few rows spread over many buckets make a spiky line, so the
-            # bucket target shrinks with the row count
-            target = min(
-                TARGET_TIME_BUCKETS, max(12, column.non_null // ROWS_PER_BUCKET)
+            # One row per entity per date, as in (package, date, downloads):
+            # there the measure over time is the chart, not the row count
+            per_category = per_time_category(
+                profile, column, [c for _, c in categories]
             )
+            panel = (
+                len(profile.primary_keys) > 1 and column.name in profile.primary_keys
+            ) or per_category is not None
+            # Few rows spread over many buckets make a spiky line, so the
+            # bucket target shrinks with the row count. A panel already has
+            # a value for every time, so it keeps the finer buckets.
+            target = TARGET_TIME_BUCKETS
+            if not panel:
+                target = min(target, max(12, column.non_null // ROWS_PER_BUCKET))
             unit, buckets = choose_time_unit(column.temporal, target)
             if unit is None or buckets < 3:
                 continue
@@ -126,14 +137,6 @@ class Line(BuiltinChartType):
             if tokens & WEAK_TIME_NAME_TOKENS:
                 base -= 0.06
             base -= null_penalty(column.null_rate, 0.4)
-            # One row per entity per date, as in (package, date, downloads):
-            # there the measure over time is the chart, not the row count
-            per_category = per_time_category(
-                profile, column, [c for _, c in categories]
-            )
-            panel = (
-                len(profile.primary_keys) > 1 and column.name in profile.primary_keys
-            ) or per_category is not None
             signals = {"buckets": buckets, "unit": unit, "panel": panel}
             span = "{} spans {}; {} buckets give {} points".format(
                 column.name,
@@ -195,7 +198,7 @@ class Line(BuiltinChartType):
                     Candidate(
                         spec=self._spec(x, y, series),
                         score=round(score, 4),
-                        reason=f"{aggregate_title(y)} per {unit} of {column.name}, {split}",
+                        reason=f"{aggregate_title(y)} {per_time_unit(unit, column.name)}, {split}",
                         signals={**signals, "series_quality": quality},
                     )
                 )
@@ -278,7 +281,7 @@ class Line(BuiltinChartType):
         x = encoding["x"]
         title = aggregate_title(encoding.get("y"))
         if x.get("timeUnit"):
-            title += " per {} of {}".format(x["timeUnit"], x["column"])
+            title += " " + per_time_unit(x["timeUnit"], x["column"])
         else:
             title += " over {}".format(x["column"])
         if encoding.get("series"):

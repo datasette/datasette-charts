@@ -207,20 +207,29 @@ export async function copyText(text) {
 
 // A button that copies text to the clipboard, says whether it worked, then
 // goes back to its own label. If nothing can be copied, the text is shown
-// beside the button, selected, to be copied by hand.
-export function copyButton(label, done, getText, failed = "Could not copy") {
+// beside the button, selected, to be copied by hand. `name` is a fuller
+// accessible name for a short label, such as "Copy link to this chart" for
+// "Copy link".
+export function copyButton(label, done, getText, failed = "Could not copy", name = null) {
   let timer = null;
   const button = h(
     "button",
     {
       type: "button",
       class: "dc-link",
+      "aria-label": name,
+      title: name,
       onclick: async () => {
         const text = getText();
         const ok = await copyText(text);
+        // What it says now is what it is called now, for screen readers too
         button.textContent = ok ? done : failed;
+        if (name) button.setAttribute("aria-label", ok ? done : failed);
         clearTimeout(timer);
-        timer = setTimeout(() => (button.textContent = label), ok ? 2000 : 5000);
+        timer = setTimeout(() => {
+          button.textContent = label;
+          if (name) button.setAttribute("aria-label", name);
+        }, ok ? 2000 : 5000);
         const previous = button.nextElementSibling;
         if (previous && previous.classList.contains("dc-copy-fallback")) previous.remove();
         if (!ok) {

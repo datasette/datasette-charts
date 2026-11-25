@@ -482,7 +482,13 @@ class ChartsPanel {
       // Built from this page and the chart's own spec, not the address bar:
       // inside Datasette Agent's panel this page is in a frame, and the
       // address bar shows the conversation
-      copyButton("Copy link to this chart", "Link copied", () => chartLink(location.href, this.current.spec), "Copy this link:"),
+      copyButton(
+        "Copy link",
+        "Link copied",
+        () => chartLink(location.href, this.current.spec),
+        "Copy this link:",
+        "Copy link to this chart"
+      ),
       ...copyDataButtons(result)
     );
     this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links));

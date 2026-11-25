@@ -323,7 +323,7 @@ async def test_annotations_round_trip_through_a_chart_link_and_embed(ds):
         html_module.unescape(re.search(r'config="([^"]*)"', html).group(1))
     )
     assert config["spec"]["annotations"] == spec["annotations"]
-    # "Open in the chart builder" and "Copy link to this chart" use this: the
+    # "Open in the chart builder" and "Copy link" use this: the
     # source's own page, with the whole spec, annotations included
     assert config["chart_url"] == path
     assert json.loads(unquote(config["chart_url"].partition("#chart=")[2])) == spec
@@ -372,4 +372,7 @@ async def test_copy_link_does_not_use_the_address_bar(ds):
     assert 'document.execCommand("copy")' in draw
     assert "window.isSecureContext" in draw
     embed = (await ds.client.get("/-/static-plugins/datasette-charts/embed.js")).text
-    assert "Copy link to this chart" in embed
+    # A short label, with a fuller accessible name
+    for script in (charts, embed):
+        assert '"Copy link",' in script
+        assert '"Copy link to this chart"' in script

@@ -84,7 +84,13 @@ class DatasetteChart extends HTMLElement {
       links.push(h("a", { href: this.config.chart_url }, "Open in the chart builder"));
       // The same link, absolute, for pasting elsewhere
       links.push(
-        copyButton("Copy link to this chart", "Link copied", () => chartLink(this.config.chart_url, spec), "Copy this link:")
+        copyButton(
+          "Copy link",
+          "Link copied",
+          () => chartLink(this.config.chart_url, spec),
+          "Copy this link:",
+          "Copy link to this chart"
+        )
       );
     }
     if (result.sql_url) links.push(h("a", { href: result.sql_url }, "This chart's SQL"));

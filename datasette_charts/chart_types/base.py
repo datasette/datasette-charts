@@ -66,6 +66,17 @@ class ChartType:
     max_rows: int = 500  # upper bound on rows this chart ever needs
     # {"layout": {"label": "Layout", "values": [...], "default": ...}}
     options: dict = {}
+    # The annotation types this chart's renderer draws: any of "line",
+    # "range", "point" and "text". None by default, since a renderer has to
+    # draw them. See annotations.py.
+    annotation_types: tuple = ()
+    # What an annotation's x and y are on this chart, by spec channel:
+    # "number", "category" or "time"
+    annotation_axes: dict = {}
+    # Whether a point annotation can name a series
+    annotation_series: bool = False
+    # Whether a point annotation can leave out y and have it looked up
+    annotation_lookup: bool = True
 
     def channel(self, name: str) -> Channel | None:
         for channel in self.channels:
@@ -116,13 +127,23 @@ class ChartType:
             "channels": [channel.to_dict() for channel in self.channels],
             "options": self.options,
             "max_rows": self.max_rows,
+            "annotations": {
+                "types": list(self.annotation_types),
+                "axes": dict(self.annotation_axes),
+                "series": self.annotation_series,
+                "lookup": self.annotation_lookup,
+            },
         }
+
+
+ALL_ANNOTATIONS = ("line", "range", "point", "text")
 
 
 class BuiltinChartType(ChartType):
     "Built-in renderers are static files shipped with this plugin"
 
     js_file: str = None
+    annotation_types = ALL_ANNOTATIONS
 
     def get_js_url(self, datasette) -> str:
         return datasette.static(f"renderers/{self.js_file}", plugin="datasette-charts")

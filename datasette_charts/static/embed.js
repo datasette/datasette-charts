@@ -5,7 +5,7 @@
 // the spec and the endpoint URLs. The rows are fetched as whoever is looking
 // at the page, so the data endpoint's permission checks apply to them.
 
-import { copyDataButtons, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { chartLabel, copyDataButtons, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 // One request for the chart types, however many charts a page shows
 const typeRequests = new Map();
@@ -75,7 +75,7 @@ class DatasetteChart extends HTMLElement {
     }
     holder.style.cssText = "";
     this.chartEl.replaceChildren(holder);
-    this.chartEl.setAttribute("aria-label", result.title);
+    this.chartEl.setAttribute("aria-label", chartLabel(result));
     this.titleEl.textContent = result.title;
     this.noteEl.classList.remove("dc-error");
     this.noteEl.textContent = truncationNote(result);

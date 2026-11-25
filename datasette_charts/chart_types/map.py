@@ -60,6 +60,8 @@ class Map(BuiltinChartType):
         ),
     ]
     max_rows = MAX_CELLS
+    # A map has no x or y axis, so only free-floating notes
+    annotation_types = ("text",)
 
     def _raw(self, profile) -> bool:
         return (

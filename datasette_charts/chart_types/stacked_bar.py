@@ -68,6 +68,9 @@ class StackedBar(BuiltinChartType):
         }
     }
     max_rows = 1001
+    # x is a time axis when its column is temporal
+    annotation_axes = {"x": "category", "y": "number"}
+    annotation_series = True
 
     def propose(self, profile) -> list:
         scored = []

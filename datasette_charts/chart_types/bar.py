@@ -72,6 +72,14 @@ class Bar(BuiltinChartType):
         ),
     ]
     max_rows = 101
+    options = {
+        "orientation": {
+            "label": "Bars",
+            "values": ["horizontal", "vertical"],
+            "default": "horizontal",
+        }
+    }
+    annotation_axes = {"x": "category", "y": "number"}
 
     def propose(self, profile) -> list:
         candidates = []

@@ -11,7 +11,7 @@ This is an early version of the design in [spec.md](spec.md): enough to try the 
 
 ## Requirements
 
-This needs a Datasette newer than 1.0a43: commit `56e02c1` or later, which is not yet in a release. Until it is, run against a checkout of Datasette's `main` branch. From a checkout of this repository:
+This needs Datasette 1.0a44 or later. The annotation editor uses `<datasette-modal>`, which Datasette has shipped since 1.0a41. To run against a checkout of Datasette's `main` branch instead, from a checkout of this repository:
 
 ```bash
 uv run --no-project --with-editable ~/dev/datasette --with-editable . datasette content.db
@@ -132,6 +132,49 @@ datasette charts profile data.db orders
 
 `suggest` prints the ranked suggestions with the signals behind each score. `profile` prints the facts gathered about each column. Both take `--json`, and `--time-limit-ms 10000` to run with a longer SQL time limit.
 
+### Annotations
+
+A chart can carry notes: a dashed line where a rule changed, a target line, a shaded range for a recession, a callout on one data point or a free-floating note. In the builder, **Annotations** lists them, with buttons to add, edit and remove them. Editing one opens a dialog with a live preview of the chart. The dialog is Datasette's own `<datasette-modal>`.
+
+Annotations are part of the chart's spec, so they are kept in the `#chart=` link, drawn by `<datasette-chart>` embeds and written by Datasette Agent. They change nothing about the chart's SQL. They are listed under `annotations`:
+
+```json
+{
+  "v": 1,
+  "type": "bar",
+  "encoding": {
+    "x": {"column": "year", "sort": "key", "limit": 50, "other": false},
+    "y": {"column": "delays", "aggregate": "sum"}
+  },
+  "options": {"orientation": "vertical"},
+  "annotations": [
+    {"type": "line", "x": 2009, "position": "after", "text": "Tarmac delay rule enacted"}
+  ]
+}
+```
+
+| Type | Example | Draws |
+|------|---------|-------|
+| `line` at x | `{"type": "line", "x": 2009, "position": "after", "text": "Rule enacted"}` | A line across the chart at an x value |
+| `line` at y | `{"type": "line", "y": 100, "text": "Target", "stroke": "solid"}` | A line at a y value, such as a threshold |
+| `range` | `{"type": "range", "x": "2007-12", "x2": "2009-06", "text": "Recession"}` | A shaded band between two x values, or `y` and `y2` |
+| `point` | `{"type": "point", "x": "2020-04", "text": "Pandemic spike"}` | A callout on a data point, with a dot and a line to the text |
+| `text` | `{"type": "text", "left": 0.02, "top": 0.05, "text": "Source: FAA"}` | A note placed by fractions of the plot area |
+
+- `x` and `y` are the spec's own x and y channels. On a horizontal bar chart x is the category axis, down the side, so a line at an x value there is horizontal.
+- x values are written the way the chart shows them: a category, a year (`2009`), a month (`"2009-06"`), a date or time (`"2009-06-15"`, `"2009-06-15T10:30"`), or a number.
+- `position` places a line at an x category or time: `before`, `center` or `after`. Before or after a category puts the line between it and its neighbour. On a time axis a value names a period, and the line goes at its start (the default), middle or end: `"x": 2009, "position": "after"` is the end of 2009.
+- A `range` over categories or periods covers both ends whole.
+- A `point` with no `y` uses the chart's own value at x. `series` picks a series on a line or stacked bar chart. Scatter plots need `y`.
+- Optional styling: `anchor` is where the text sits from what it labels (`top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`); `color` is `blue`, `orange`, `green`, `yellow`, `pink`, `red`, `purple`, `gray` (all following the chart's light or dark palette) or a hex color; lines take `stroke`: `dashed` (the default), `solid` or `dotted`; points take `"marker": false` for text with no dot.
+- Text is at most 200 characters. It wraps to stay inside the plot, and a line break in it starts a new line. A chart takes at most 20 annotations.
+
+Bar, line, histogram, scatter and stacked bar charts take every type. Maps take `text` only, since they have no x or y axis. A chart type from another plugin takes none unless it says which it draws, with `annotation_types`.
+
+Annotations are checked on the server like the rest of the spec, and a mistake comes back as an error naming the annotation, such as `annotations[0]: a line needs x (a vertical line on most charts) or y (a horizontal line), not both`. An annotation at a value the chart does not show, such as a year outside its range, is not drawn, and a note under the chart says so.
+
+Bar charts take an `orientation` option, `horizontal` (the default) or `vertical`, for upright bars such as one per year.
+
 ## HTTP API
 
 | Endpoint | Returns |
@@ -163,10 +206,13 @@ A filtered table is a table source with the filters from the table page's query 
 
 ## Using charts from Datasette Agent
 
-When [datasette-agent](https://github.com/datasette/datasette-agent) is installed as well, the agent gets two tools:
+When [datasette-agent](https://github.com/datasette/datasette-agent) is installed as well, the agent gets three tools:
 
 - `suggest_charts` returns the role of each column and the ranked suggestions for a table, view, stored query or SQL query: the same ones the Suggested charts panel shows.
-- `chart` draws a chart in the chat from a spec, and returns the rows it plots to the model so it can comment on them. A spec that does not fit the data comes back as a list of errors for the model to correct.
+- `chart` draws a chart in the chat from a spec, and returns the rows it plots to the model so it can comment on them. A spec that does not fit the data comes back as a list of errors for the model to correct. Its description teaches the model the [annotation](#annotations) format, with an example.
+- `annotate_chart` adds, changes or removes the annotations on a chart that has been drawn, and draws it again. It takes the `chart_path` from an earlier result, or the address of a chart page the user has open in the panel, with `add`, `update` (`[{"index": 0, "text": "..."}]`), `remove` (indexes) or `annotations` (a whole new list).
+
+An annotation that names a category the chart does not show is valid, but is not drawn, so `chart` and `annotate_chart` return an `annotation_warnings` list for those, with the values that are there.
 
 Both take `database` and one of `table`, `sql` or `query_name`, with optional `filters` for a table (`{"state": "CA", "price__gt": "5"}`) and `params` for a query.
 
@@ -234,10 +280,9 @@ To set up this plugin locally, first checkout the code. You can confirm it is av
 ```bash
 cd datasette-charts
 # Confirm the plugin is visible
-uv run --no-project --with-editable ~/dev/datasette --with-editable . datasette plugins
+uv run datasette plugins
 ```
-To run the tests, which also need Datasette's `main` branch for now:
+To run the tests:
 ```bash
-uv run --no-project --with-editable ~/dev/datasette --with-editable . \
-  --with pytest --with pytest-asyncio pytest
+uv run pytest
 ```

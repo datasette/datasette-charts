@@ -12,6 +12,7 @@ import {
   fmtBucket,
   xLabel,
 } from "./common.js";
+import { annotate, bandMatcher, parseMoment } from "./annotations.js";
 
 const ROW_HEIGHT = 24;
 const MAX_LABEL = 28;
@@ -30,6 +31,7 @@ export function render(el, ctx) {
   const totals = new Map();
   const others = new Set();
   const keys = [];
+  const rawKeys = new Map();
   const items = [];
   for (const d of data) {
     const series = categoryName(d.series, d.series_is_other, d.series_label);
@@ -44,6 +46,7 @@ export function render(el, ctx) {
     } else {
       item.key = categoryName(d.key, d.key_is_other, d.key_label);
       if (!keys.includes(item.key)) keys.push(item.key);
+      if (!d.key_is_other) rawKeys.set(item.key, d.key);
     }
     items.push(item);
   }
@@ -120,5 +123,43 @@ export function render(el, ctx) {
       });
     }
   }
-  mount(el, ctx, Plot.plot(basePlot(ctx, options)));
+  const plot = Plot.plot(basePlot(ctx, options));
+  const match = temporal ? null : bandMatcher(visibleKeys, visibleKeys.map((key) => rawKeys.get(key)));
+  // The top of the stack at x, or of the named series' segment in it
+  const lookup = (annotation) => {
+    let key = null;
+    let date = null;
+    if (temporal) {
+      const period = parseMoment(annotation.x);
+      if (!period) return null;
+      const time = period.start.getTime();
+      const hit = shown.find((d) => d.date.getTime() <= time && time < d.end.getTime());
+      if (!hit) return null;
+      date = hit.date;
+    } else {
+      key = match(annotation.x);
+      if (key === null) return null;
+    }
+    const here = shown.filter((d) => (temporal ? d.date.getTime() === date.getTime() : d.key === key));
+    let total = 0;
+    let found = annotation.series === undefined;
+    for (const d of here) {
+      total += d.value || 0;
+      if (annotation.series !== undefined && d.series === String(annotation.series)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found || !here.length) return null;
+    if (temporal) return { x: new Date((date.getTime() + here[0].end.getTime()) / 2), y: total };
+    return { x: key, y: total };
+  };
+  annotate(el, ctx, plot, {
+    x: temporal
+      ? { screen: "x", kind: "time" }
+      : { screen: grouped ? "fy" : "y", kind: "band", match },
+    y: { screen: temporal ? "y" : "x", kind: "number" },
+    lookup: grouped ? null : lookup,
+  });
+  mount(el, ctx, plot);
 }

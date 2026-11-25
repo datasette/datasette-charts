@@ -1,4 +1,5 @@
 import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { annotate } from "./annotations.js";
 
 // rows: bucket, n.
 //
@@ -71,5 +72,14 @@ export function render(el, ctx) {
       ],
     })
   );
+  annotate(el, ctx, plot, {
+    x: { screen: "x", kind: "number" },
+    y: { screen: "y", kind: "number" },
+    // The bin that holds x: the point goes on top of its bar
+    lookup: (annotation) => {
+      const bin = bins.find((d) => d.x1 <= annotation.x && annotation.x < d.x2);
+      return bin ? { x: (bin.x1 + bin.x2) / 2, y: bin.n } : null;
+    },
+  });
   mount(el, ctx, plot);
 }

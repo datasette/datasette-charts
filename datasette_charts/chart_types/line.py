@@ -93,6 +93,8 @@ class Line(BuiltinChartType):
         ),
     ]
     max_rows = MAX_TIME_BUCKETS * (DEFAULT_SERIES_LIMIT + 1)
+    annotation_axes = {"x": "time", "y": "number"}
+    annotation_series = True
 
     def propose(self, profile) -> list:
         candidates = []

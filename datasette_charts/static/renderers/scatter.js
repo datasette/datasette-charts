@@ -1,4 +1,5 @@
 import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { annotate } from "./annotations.js";
 
 // meta.mode is "points" (rows: x, y) for small sources, or "bins"
 // (rows: bx, by, n, with meta.x_bin and meta.y_bin) drawn as a heatmap.
@@ -68,5 +69,10 @@ export function render(el, ctx) {
       }),
     ];
   }
-  mount(el, ctx, Plot.plot(basePlot(ctx, options)));
+  const plot = Plot.plot(basePlot(ctx, options));
+  annotate(el, ctx, plot, {
+    x: { screen: "x", kind: "number" },
+    y: { screen: "y", kind: "number" },
+  });
+  mount(el, ctx, plot);
 }

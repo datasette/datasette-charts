@@ -9,7 +9,9 @@ import {
   bucketToDate,
   fmtBucket,
   allBuckets,
+  stepDate,
 } from "./common.js";
+import { annotate, parseMoment } from "./annotations.js";
 
 // Aggregates where a time bucket with no rows really is zero
 const ZERO_WHEN_EMPTY = new Set(["count", "sum", "count_distinct"]);
@@ -129,5 +131,25 @@ export function render(el, ctx) {
   }
 
   options.marks = marks;
-  mount(el, ctx, Plot.plot(basePlot(ctx, options)));
+  const plot = Plot.plot(basePlot(ctx, options));
+  annotate(el, ctx, plot, {
+    x: { screen: "x", kind: "time" },
+    y: { screen: "y", kind: "number" },
+    // The value in the bucket that holds x, of the series named or the largest
+    lookup: (annotation) => {
+      const period = parseMoment(annotation.x);
+      if (!period) return null;
+      const name = hasSeries ? (annotation.series ?? (series[0] && series[0].name)) : SINGLE;
+      const time = period.start.getTime();
+      const point = points.find(
+        (d) =>
+          d.series === String(name) &&
+          d.date.getTime() <= time &&
+          time < stepDate(d.date, unit).getTime() &&
+          d.value !== null
+      );
+      return point ? { x: point.date, y: point.value } : null;
+    },
+  });
+  mount(el, ctx, plot);
 }

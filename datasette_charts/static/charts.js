@@ -5,7 +5,9 @@
 // Suggestions and the builder both produce specs in the chart DSL, and the
 // server only ever compiles specs.
 
-import { copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { annotationSection } from "./annotation-editor.js";
+import { parseMoment } from "./renderers/annotations.js";
+import { chartLabel, copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
 const SELECTED_PREFIX = "datasette-charts:selected:";
@@ -389,6 +391,7 @@ class ChartsPanel {
       card.setAttribute("aria-pressed", card === chart.card ? "true" : "false");
     }
     this.current = chart;
+    this.lastResult = null;
     this.titleEl = h("h3", { class: "dc-title" }, chart.title || "Chart");
     this.reasonEl = h("p", { class: "dc-reason" }, chart.reason || "");
     this.chartEl = h("div", { class: "dc-chart", role: "img" });
@@ -441,6 +444,10 @@ class ChartsPanel {
     const result = await this.draw(holder, chart.spec, "full", this.chartEl);
     if (requestId !== this.requestId || chart !== this.current) return;
     this.chartEl.classList.remove("dc-loading");
+    const hadResult = !!this.lastResult;
+    this.lastResult = result.ok ? result : null;
+    // The annotation list describes values with the chart's own column names
+    if (!hadResult && result.ok && (chart.spec.annotations || []).length) this.renderBuilder();
     if (!result.ok) {
       // The spec cannot be drawn, so the previous chart must not stay up
       this.chartEl.replaceChildren();
@@ -461,7 +468,7 @@ class ChartsPanel {
     chart.title = result.title;
     this.titleEl.textContent = result.title;
     this.reasonEl.textContent = chart.reason || "";
-    this.chartEl.setAttribute("aria-label", [result.title, chart.reason].filter(Boolean).join(". "));
+    this.chartEl.setAttribute("aria-label", chartLabel(result, chart.reason));
     this.noteEl.classList.remove("dc-error");
     this.noteEl.textContent = truncationNote(result);
     this.renderLinks(result);
@@ -535,6 +542,53 @@ class ChartsPanel {
     return { v: 1, type: typeName, encoding, options };
   }
 
+  // Annotations carry over to a new chart type that can draw them, if
+  // their values still make sense on its axes
+  keptAnnotations(typeName, annotations) {
+    const support = (this.types[typeName] || {}).annotations || {};
+    const allowed = support.types || [];
+    const axes = support.axes || {};
+    const fits = (annotation, key) => {
+      if (!(key in annotation)) return true;
+      const axis = axes[key[0]];
+      const value = annotation[key];
+      if (!axis) return false;
+      if (axis === "number") return typeof value === "number";
+      if (axis === "time") return !!parseMoment(value);
+      return true;
+    };
+    return (annotations || []).filter(
+      (annotation) =>
+        annotation &&
+        allowed.includes(annotation.type) &&
+        ["x", "x2", "y", "y2"].every((key) => fits(annotation, key)) &&
+        (!annotation.series || support.series)
+    );
+  }
+
+  // Called by the annotation editor with the chart's new annotations.
+  // `focus` is the index of the one to put focus on, or "add".
+  setAnnotations(annotations, focus) {
+    const chart = this.current;
+    if (annotations.length) chart.spec.annotations = annotations;
+    else delete chart.spec.annotations;
+    this.edited();
+    this.renderBuilder();
+    const target =
+      focus === "add" || focus === undefined || focus === null
+        ? this.builderEl.querySelector("[data-annotation-add]")
+        : this.builderEl.querySelector(`[data-annotation-edit="${focus}"]`);
+    if (target) target.focus();
+    this.drawCurrent();
+  }
+
+  // An edited chart is no longer the suggestion it started as
+  edited() {
+    this.current.reason = "";
+    this.current.card = null;
+    for (const card of this.strip.querySelectorAll(".dc-card")) card.setAttribute("aria-pressed", "false");
+  }
+
   renderBuilder() {
     const spec = this.current.spec;
     const type = this.types[spec.type];
@@ -570,6 +624,10 @@ class ChartsPanel {
           )
         );
       }
+    }
+    if (type) {
+      const annotations = annotationSection(this);
+      if (annotations) fields.push(annotations);
     }
     this.builderEl.replaceChildren(...fields);
     if (focused && this.builderEl.elements[focused]) this.builderEl.elements[focused].focus();
@@ -678,8 +736,11 @@ class ChartsPanel {
     const chart = this.current;
     const spec = chart.spec;
     const [first, field] = control.name.split(".");
+    if (!control.name) return; // not one of the builder's own controls
     if (control.name === "type") {
       chart.spec = this.defaultSpec(control.value, spec.encoding);
+      const annotations = this.keptAnnotations(control.value, spec.annotations);
+      if (annotations.length) chart.spec.annotations = annotations;
     } else if (first === "option") {
       spec.options = { ...(spec.options || {}), [field]: control.value };
     } else {
@@ -716,10 +777,7 @@ class ChartsPanel {
         encoding[field] = control.value;
       }
     }
-    // An edited chart is no longer the suggestion it started as
-    chart.reason = "";
-    chart.card = null;
-    for (const card of this.strip.querySelectorAll(".dc-card")) card.setAttribute("aria-pressed", "false");
+    this.edited();
     this.renderBuilder();
     this.drawCurrent();
   }

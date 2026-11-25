@@ -81,19 +81,33 @@ export async function drawChart(el, { urls, types, source, spec, size = "full", 
     size,
   });
   if (!result.ok) return result;
+  return renderChart(el, { urls, types, spec, result, size, measureFrom });
+}
+
+// Draws rows already fetched for a spec. Annotations do not change the rows,
+// so a spec that differs only in its annotations can be drawn again from the
+// same result without asking the server. The result comes back with
+// `annotationNotes`, saying which annotations could not be placed, and
+// `annotationText`, the text of the ones that were.
+export async function renderChart(el, { urls, types, spec, result, size = "full", measureFrom }) {
   const type = types[spec.type];
+  const ctx = {
+    spec,
+    rows: result.rows,
+    columns: result.columns,
+    data: result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]]))),
+    meta: result.meta || {},
+    size,
+    annotationNotes: [],
+    annotationText: [],
+  };
   try {
     const [{ Plot, d3 }, renderer] = await Promise.all([loadPlot(urls), import(type.js_url)]);
     const thumbnail = size === "thumbnail";
     const box = measureFrom || el;
     const width = thumbnail ? THUMBNAIL.width : Math.max(320, Math.floor(box.clientWidth));
     await renderer.render(el, {
-      spec,
-      rows: result.rows,
-      columns: result.columns,
-      data: result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]]))),
-      meta: result.meta || {},
-      size,
+      ...ctx,
       width,
       height: thumbnail ? THUMBNAIL.height : FULL_HEIGHT,
       Plot,
@@ -101,17 +115,35 @@ export async function drawChart(el, { urls, types, source, spec, size = "full", 
       theme: themeFor(box),
       urls,
       loadScript,
+      // Renderers add to these
+      annotationNotes: ctx.annotationNotes,
+      annotationText: ctx.annotationText,
     });
   } catch (e) {
     console.error("datasette-charts could not draw a chart", e);
     return { ok: false, error: "This chart could not be drawn" };
   }
-  return result;
+  return { ...result, annotationNotes: ctx.annotationNotes, annotationText: ctx.annotationText };
+}
+
+// The text alternative for a drawn chart: its title, then its annotations
+export function chartLabel(result, ...extra) {
+  const parts = [result.title, ...extra].filter(Boolean);
+  if (result.annotationText && result.annotationText.length) {
+    parts.push(`Annotations: ${result.annotationText.join("; ")}`);
+  }
+  return parts.join(". ");
 }
 
 export function truncationNote(result) {
-  if (!result.truncated) return "";
-  return `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`;
+  const notes = [];
+  if (result.truncated) {
+    notes.push(
+      `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`
+    );
+  }
+  for (const note of result.annotationNotes || []) notes.push(`${note}.`);
+  return notes.join(" ");
 }
 
 // A button that copies text to the clipboard, says whether it worked, then

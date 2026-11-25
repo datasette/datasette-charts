@@ -231,3 +231,91 @@ export function allBuckets(dates, unit, max = 2000) {
 function gcd(a, b) {
   return b ? gcd(b, a % b) : a;
 }
+
+// --- Crowded category axes ------------------------------------------------------
+
+let measurer = null;
+export function textWidth(text, font) {
+  // Away from a browser (in tests), an estimate from the font size
+  if (typeof document === "undefined") return String(text).length * parseFloat(font) * 0.55;
+  if (!measurer) measurer = document.createElement("canvas").getContext("2d");
+  measurer.font = font;
+  return measurer.measureText(String(text)).width;
+}
+
+// How to write category labels under upright bars so they do not run into
+// each other, tried in this order until they fit:
+//   level: as they are, flat, when they fit side by side
+//   then turned 40 degrees at 12px; smaller, down to 9px; steeper, to 60
+//   and then 90 degrees; and last, for ordered values such as years only,
+//   every Nth label. Named categories never lose a label.
+// Turned labels need their line height, plus a little air, between them
+// along the axis.
+export const BAND_LABEL_STEPS = [
+  [12, 40],
+  [11, 40],
+  [10, 40],
+  [9, 40],
+  [9, 60],
+  [9, 90],
+];
+
+export function fitBandLabels(labels, { step, fontFamily, ordered }) {
+  const font = (size) => `${size}px ${fontFamily}`;
+  const longestChars = Math.max(0, ...labels.map((label) => label.length));
+  // The rule charts already used to stay level, so those look the same
+  if (longestChars * 6.6 <= step - 4) return { fontSize: 12, angle: 0, every: 1, marginBottom: 44, overhang: 0 };
+  const needs = (size, angle) => (size * 1.2 + 3) / Math.sin((angle * Math.PI) / 180);
+  let chosen = null;
+  for (let every = 1; every <= labels.length && !chosen; every++) {
+    if (every > 1 && !ordered) break;
+    const found = BAND_LABEL_STEPS.find(([size, angle]) => step * every >= needs(size, angle));
+    if (found) chosen = { size: found[0], angle: found[1], every };
+  }
+  // Named categories that cannot fit even upright at 9px: upright at 9px
+  if (!chosen) chosen = { size: 9, angle: 90, every: 1 };
+  const { size, angle, every } = chosen;
+  const radians = (angle * Math.PI) / 180;
+  const widest = Math.max(0, ...labels.map((label) => textWidth(label, font(size))));
+  const first = labels.length ? textWidth(labels[0], font(size)) : 0;
+  return {
+    fontSize: size,
+    angle,
+    every,
+    // Room under the plot for the turned labels
+    marginBottom: Math.min(170, Math.ceil(widest * Math.sin(radians) + size * Math.cos(radians)) + 16),
+    // How far the first label reaches left of its bar's middle
+    overhang: Math.ceil(first * Math.cos(radians)),
+  };
+}
+
+// Whether category values are ordered numbers or dates, such as years,
+// which can be thinned out without losing track of which bar is which
+export function orderedValues(keys) {
+  const values = keys.map((key) => {
+    if (typeof key === "number") return key;
+    const text = String(key ?? "");
+    if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);
+    if (/^\d{4}(-\d\d){0,2}$/.test(text)) return Date.parse(text);
+    return NaN;
+  });
+  if (values.length < 3 || values.some((value) => Number.isNaN(value))) return false;
+  const up = values.every((value, i) => i === 0 || value > values[i - 1]);
+  const down = values.every((value, i) => i === 0 || value < values[i - 1]);
+  return up || down;
+}
+
+// A left margin wide enough for the value axis's tick labels, such as
+// "1,200,000", which the default 56px would clip. Never less than 56px.
+export function valueAxisMargin(values, fontFamily = "system-ui, sans-serif") {
+  const finite = values.filter((value) => typeof value === "number" && Number.isFinite(value));
+  if (!finite.length) return 56;
+  const biggest = Math.max(...finite.map((value) => Math.abs(value)));
+  if (!biggest) return 56;
+  // Round up to two significant figures, about what the top tick will be
+  const scale = 10 ** Math.max(0, Math.floor(Math.log10(biggest)) - 1);
+  const top = Math.ceil(biggest / scale) * scale;
+  const negative = finite.some((value) => value < 0) ? "−" : "";
+  const label = negative + new Intl.NumberFormat("en").format(top);
+  return Math.max(56, Math.ceil(textWidth(label, `12px ${fontFamily}`) + 18));
+}

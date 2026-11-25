@@ -1,4 +1,4 @@
-import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel, valueAxisMargin } from "./common.js";
 import { annotate } from "./annotations.js";
 
 // meta.mode is "points" (rows: x, y) for small sources, or "bins"
@@ -8,7 +8,14 @@ export function render(el, ctx) {
   const thumbnail = isThumbnail(ctx);
   const plainTicks = (name) => (looksLikeYears(name) ? (d) => String(d) : undefined);
   const options = {
-    marginLeft: thumbnail ? 6 : 56,
+    marginLeft: thumbnail
+      ? 6
+      : valueAxisMargin(
+          meta.mode === "points"
+            ? data.map((d) => d.y)
+            : data.map((d) => meta.y_bin.start + (d.by + 1) * meta.y_bin.step),
+          getComputedStyle(el).fontFamily
+        ),
     x: { ...xLabel(meta.x), grid: !thumbnail, nice: true, tickFormat: plainTicks(meta.x) },
     y: { label: meta.y, grid: !thumbnail, nice: true, tickFormat: plainTicks(meta.y) },
   };

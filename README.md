@@ -179,7 +179,7 @@ Bar, line, histogram, scatter and stacked bar charts take every type. Maps take 
 
 Annotations are checked on the server like the rest of the spec, and a mistake comes back as an error naming the annotation, such as `annotations[0]: a line needs x (a vertical line on most charts) or y (a horizontal line), not both`. An annotation at a value the chart does not show, such as a year outside its range, is not drawn, and a note under the chart says so.
 
-Bar charts take an `orientation` option, `horizontal` (the default) or `vertical`, for upright bars such as one per year.
+Bar charts take an `orientation` option, `horizontal` (the default) or `vertical`, for upright bars such as one per year. When upright bars are too narrow for their labels to sit level, the labels are turned, then made smaller (down to 9px), then turned further, up to upright. Only as a last resort, and only for ordered values such as years, every second (or Nth) label is left out. Named categories always keep every label.
 
 ## HTTP API
 

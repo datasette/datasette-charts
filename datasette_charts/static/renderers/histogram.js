@@ -1,4 +1,4 @@
-import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel, valueAxisMargin } from "./common.js";
 import { annotate } from "./annotations.js";
 
 // rows: bucket, n.
@@ -46,7 +46,7 @@ export function render(el, ctx) {
   });
 
   const options = basePlot(ctx, {
-      marginLeft: thumbnail ? 6 : 56,
+      marginLeft: thumbnail ? 6 : valueAxisMargin(bins.map((d) => d.n), getComputedStyle(el).fontFamily),
       x: {
         ...xLabel(meta.column),
         type: log ? "log" : "linear",

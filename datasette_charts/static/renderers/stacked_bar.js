@@ -11,6 +11,7 @@ import {
   stepDate,
   fmtBucket,
   xLabel,
+  valueAxisMargin,
 } from "./common.js";
 import { annotate, bandMatcher, parseMoment } from "./annotations.js";
 
@@ -67,7 +68,12 @@ export function render(el, ctx) {
 
   if (temporal) {
     Object.assign(options, {
-      marginLeft: thumbnail ? 6 : 56,
+      marginLeft: thumbnail
+        ? 6
+        : valueAxisMargin(
+            [...shown.reduce((totals, d) => totals.set(d.date.getTime(), (totals.get(d.date.getTime()) || 0) + (d.value || 0)), new Map()).values()],
+            getComputedStyle(el).fontFamily
+          ),
       x: { type: "utc", label: null },
       y: { label: meta.y, grid: !thumbnail, nice: true },
       marks: [

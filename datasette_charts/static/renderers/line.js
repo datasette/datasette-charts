@@ -10,6 +10,7 @@ import {
   fmtBucket,
   allBuckets,
   stepDate,
+  valueAxisMargin,
 } from "./common.js";
 import { annotate, parseMoment } from "./annotations.js";
 
@@ -61,7 +62,7 @@ export function render(el, ctx) {
 
   const marks = [];
   const options = {
-    marginLeft: thumbnail ? 6 : 56,
+    marginLeft: thumbnail ? 6 : valueAxisMargin(points.map((d) => d.value), getComputedStyle(el).fontFamily),
     x: { type: "utc", label: null },
     y: { label: meta.y, grid: !thumbnail, nice: true, zero: fillZero },
   };

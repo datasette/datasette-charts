@@ -9,6 +9,10 @@ import {
   uniqueNames,
   truncate,
   xLabel,
+  fitBandLabels,
+  orderedValues,
+  textWidth,
+  valueAxisMargin,
 } from "./common.js";
 import { annotate, bandMatcher } from "./annotations.js";
 
@@ -41,12 +45,32 @@ export function render(el, ctx) {
 
   let plot;
   if (vertical) {
-    const plotWidth = ctx.width - 56 - 16;
+    const fontFamily = getComputedStyle(el).fontFamily || "system-ui, sans-serif";
+    const plotWidth = ctx.width - valueAxisMargin(bars.map((d) => d.value), fontFamily) - 16;
     const step = plotWidth / Math.max(1, bars.length);
-    const longest = Math.max(0, ...names.map((name) => Math.min(name.length, MAX_LABEL)));
-    // Labels that would run into each other are turned
-    const rotate = !thumbnail && longest * 6.6 > step - 4;
+    // Labels that would run into each other are turned, made smaller, or
+    // for years and the like, thinned out
+    const shownNames = names.map((name) => truncate(name, MAX_LABEL));
+    const realKeys = rows.filter((d) => !d.is_other).map((d) => d.key);
+    const fit = fitBandLabels(shownNames, {
+      step,
+      fontFamily,
+      ordered: orderedValues(realKeys),
+    });
+    const keep = new Set(names.filter((name, i) => i % fit.every === 0 || rows[i].is_other));
     const marks = [
+      ...(thumbnail
+        ? []
+        : [
+            Plot.axisX({
+              label: null,
+              tickSize: 0,
+              tickRotate: -fit.angle,
+              fontSize: fit.fontSize,
+              ticks: names.filter((name) => keep.has(name)),
+              tickFormat: (name) => truncate(name, MAX_LABEL),
+            }),
+          ]),
       Plot.barY(bars, {
         x: "name",
         y: "value",
@@ -58,7 +82,12 @@ export function render(el, ctx) {
       }),
       Plot.ruleY([0], { stroke: theme.muted }),
     ];
-    const showValues = !thumbnail && !negative && step >= 30;
+    // Values above the bars, smaller or left out when they would run into
+    // their neighbours
+    const widestValue = (size) =>
+      Math.max(0, ...bars.map((d) => textWidth(fmtCompact(d.value), `${size}px ${fontFamily}`)));
+    const valueSize = thumbnail || negative ? null : [12, 11, 10].find((size) => widestValue(size) + 4 <= step) || null;
+    const showValues = valueSize !== null;
     if (showValues) {
       marks.push(
         Plot.text(bars, {
@@ -66,22 +95,24 @@ export function render(el, ctx) {
           y: "value",
           text: (d) => fmtCompact(d.value),
           dy: -7,
+          fontSize: valueSize,
           fill: theme.ink2,
         })
       );
     }
     const options = basePlot(ctx, {
-        marginLeft: thumbnail ? 6 : 56,
+        // Turned labels reach left of the first bar
+        marginLeft: thumbnail
+          ? 6
+          : Math.max(valueAxisMargin(bars.map((d) => d.value), fontFamily), Math.min(160, fit.overhang - step / 2 + 8)),
         marginRight: thumbnail ? 6 : 16,
         marginTop: thumbnail ? 6 : 20,
-        marginBottom: thumbnail ? 6 : rotate ? Math.min(140, 20 + longest * 5) : 44,
+        marginBottom: thumbnail ? 6 : fit.marginBottom,
         x: {
           label: null,
           domain: names,
-          tickFormat: (name) => truncate(name, MAX_LABEL),
-          tickSize: 0,
-          tickRotate: rotate ? -40 : 0,
           padding: 0.15,
+          ...(thumbnail ? {} : { axis: null }),
         },
         y: { label: meta.y, grid: !thumbnail, nice: true },
         marks,

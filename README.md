@@ -7,18 +7,6 @@
 
 Suggests charts for any Datasette table, view or SQL query, and lets you build your own.
 
-This is an early version of the design in [spec.md](spec.md): enough to try the idea out against small tables and queries. See [What is not built yet](#what-is-not-built-yet).
-
-## Requirements
-
-This needs Datasette 1.0a44 or later. The annotation editor uses `<datasette-modal>`, which Datasette has shipped since 1.0a41. To run against a checkout of Datasette's `main` branch instead, from a checkout of this repository:
-
-```bash
-uv run --no-project --with-editable ~/dev/datasette --with-editable . datasette content.db
-```
-
-`--no-project` matters here. Without it, uv also installs the latest stable Datasette into this project's own environment, and that copy is the one that gets imported.
-
 ## Installation
 
 Install this plugin in the same environment as Datasette.
@@ -33,19 +21,7 @@ Beside the full-size chart is a builder for changing the chart type, columns, ag
 
 The chart you are looking at is kept in the page's URL fragment, so the address bar always holds a link to it.
 
-On a SQL query page, running edited SQL keeps the chart you have open, as it is in the builder, and draws it from the new query's rows. Running the SQL with the button, Shift+Enter or Cmd+Enter, or with changed parameters all keep it, and so does a SQL error: fix the SQL, run it again, and the chart comes back. If the new rows no longer fit the chart, it says why, such as `y: no such column: entries`, and can be changed or closed. With no chart open, nothing is carried.
-
-Collapsing the panel hides the suggestions but not the chart you have open. The panel stays collapsed on other pages until you open it again.
-
-When nothing is suggested for a table, the panel starts collapsed and is labelled **Charts**. Opening it still offers "Build a chart".
-
-Charts never fetch every row. Each one compiles to a SQL query that returns a small, aggregated result, and that query is what "This chart's SQL" links to.
-
-### Filters and facets
-
-On a filtered table page the charts cover the rows the page shows. Column filters such as `?state=CA` and `?price__gt=5`, `?_search=`, `?_where=` and `?_through=` all apply, and so does anything you click in a facet. The suggestions are worked out again for the filtered rows, so a column that the filter has narrowed to a single value is no longer suggested.
-
-The chart you select stays selected as you filter, facet, sort and page through a table: each new page opens with the same chart, now drawn from that page's rows. Close the chart to stop it coming back. This is remembered per table, in the browser tab.
+Charts never fetch every row. Each one compiles to a SQL query that returns a small, aggregated result, available through the "This chart's SQL" link.
 
 ### Chart types
 
@@ -268,14 +244,13 @@ def register_chart_types(datasette):
 
 The built-in chart types in `datasette_charts/chart_types/` are the reference for now. This interface is not stable yet.
 
-## What is not built yet
+## Potential future improvements
 
 From the spec, in rough order of how much it matters:
 
 - **The background full tier and stored profiles.** Nothing is written to the internal database and no background task runs. Profiles are kept in memory for a few minutes. A source too large to profile under the time limit gets suggestions from a sample, or none.
 - **The verify stage.** Candidates go straight from propose to rank, so nothing checks whether a time series is flat or two measures are related.
 - **Precomputed thumbnails.** Every thumbnail runs its query when it scrolls into view.
-- **The snapshot harness, contact sheet and benchmarks.**
 - **Magic parameters in stored queries**, such as `:_actor_id`.
 
 The map draws points over a coarse world land outline, which needs no network access. The spec leaves the choice of basemap open.

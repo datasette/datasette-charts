@@ -123,7 +123,7 @@ export function render(el, ctx) {
       });
     }
   }
-  const plot = Plot.plot(basePlot(ctx, options));
+  const make = (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins }));
   const match = temporal ? null : bandMatcher(visibleKeys, visibleKeys.map((key) => rawKeys.get(key)));
   // The top of the stack at x, or of the named series' segment in it
   const lookup = (annotation) => {
@@ -154,7 +154,36 @@ export function render(el, ctx) {
     if (temporal) return { x: new Date((date.getTime() + here[0].end.getTime()) / 2), y: total };
     return { x: key, y: total };
   };
-  annotate(el, ctx, plot, {
+  // Each whole stack, or each group of bars
+  const marks = (drawn) => {
+    const stacks = new Map();
+    for (const d of shown) {
+      const key = temporal ? d.date.getTime() : d.key;
+      const stack = stacks.get(key) || { d, low: 0, high: 0 };
+      if ((d.value || 0) >= 0) stack.high += d.value || 0;
+      else stack.low += d.value;
+      stack.high = grouped ? Math.max(stack.high, d.value || 0) : stack.high;
+      stacks.set(key, stack);
+    }
+    const rects = [];
+    for (const { d, low, high } of stacks.values()) {
+      if (temporal) {
+        const sx = drawn.scale("x");
+        const sy = drawn.scale("y");
+        const [a, b] = [sy.apply(low), sy.apply(high)];
+        rects.push({ left: sx.apply(d.date), right: sx.apply(d.end), top: Math.min(a, b), bottom: Math.max(a, b) });
+      } else {
+        const sx = drawn.scale("x");
+        const band = drawn.scale(grouped ? "fy" : "y");
+        const top = band.apply(d.key);
+        const [a, b] = [sx.apply(low), sx.apply(high)];
+        rects.push({ left: Math.min(a, b), right: Math.max(a, b), top, bottom: top + band.bandwidth });
+      }
+    }
+    return { rects, lines: [] };
+  };
+  const plot = annotate(el, ctx, make, {
+    marks,
     x: temporal
       ? { screen: "x", kind: "time" }
       : { screen: grouped ? "fy" : "y", kind: "band", match },

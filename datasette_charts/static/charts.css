@@ -473,3 +473,40 @@ dialog.datasette-modal.dc-annotation-dialog {
   border-radius: 4px;
   background-color: Canvas;
 }
+
+/* The numbered key under a chart whose callouts did not fit beside it */
+.dc-annotation-key {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.dc-annotation-key li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+.dc-annotation-key-number {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.5px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  forced-color-adjust: none;
+}
+/* A note that had no room on the plot */
+.dc-annotation-caption {
+  margin: 0.35rem 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dc-muted, inherit);
+}

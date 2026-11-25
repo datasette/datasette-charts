@@ -93,8 +93,7 @@ export async function render(el, ctx) {
     marks,
   });
   if (!thumbnail) delete options.height; // Plot picks one to suit the projection
-  const plot = Plot.plot(options);
   // No axes: only free-floating text notes
-  annotate(el, ctx, plot, {});
+  const plot = annotate(el, ctx, Plot.plot(options), {});
   mount(el, ctx, plot);
 }

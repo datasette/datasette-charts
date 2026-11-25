@@ -100,6 +100,8 @@ export async function renderChart(el, { urls, types, spec, result, size = "full"
     size,
     annotationNotes: [],
     annotationText: [],
+    annotationKey: [],
+    annotationCaptions: [],
   };
   try {
     const [{ Plot, d3 }, renderer] = await Promise.all([loadPlot(urls), import(type.js_url)]);
@@ -118,12 +120,36 @@ export async function renderChart(el, { urls, types, spec, result, size = "full"
       // Renderers add to these
       annotationNotes: ctx.annotationNotes,
       annotationText: ctx.annotationText,
+      annotationKey: ctx.annotationKey,
+      annotationCaptions: ctx.annotationCaptions,
     });
+    // Notes with no clear room on the plot go under it, as captions
+    for (const caption of ctx.annotationCaptions) el.append(h("p", { class: "dc-annotation-caption" }, caption));
+    // Labels with no room on the plot or in lanes beside it are
+    // numbered on the chart, and their texts listed under it
+    if (ctx.annotationKey.length) el.append(annotationKeyList(ctx.annotationKey));
   } catch (e) {
     console.error("datasette-charts could not draw a chart", e);
     return { ok: false, error: "This chart could not be drawn" };
   }
   return { ...result, annotationNotes: ctx.annotationNotes, annotationText: ctx.annotationText };
+}
+
+// The numbered key for callouts drawn as numbered markers. Real text, so it
+// wraps, can be selected and is read out.
+function annotationKeyList(key) {
+  return h(
+    "ol",
+    { class: "dc-annotation-key", "aria-label": "Notes on the chart" },
+    key.map((item) =>
+      h(
+        "li",
+        { value: item.number },
+        h("span", { class: "dc-annotation-key-number", "aria-hidden": "true", style: `background:${item.color};color:${item.surface}` }, String(item.number)),
+        h("span", { class: "dc-annotation-key-text" }, item.text)
+      )
+    )
+  );
 }
 
 // The text alternative for a drawn chart: its title, then its annotations

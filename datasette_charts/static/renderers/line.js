@@ -131,8 +131,27 @@ export function render(el, ctx) {
   }
 
   options.marks = marks;
-  const plot = Plot.plot(basePlot(ctx, options));
-  annotate(el, ctx, plot, {
+  const plot = annotate(el, ctx, (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins })), {
+    // Each series as drawn, broken where values are missing
+    marks: (drawn) => {
+      const sx = drawn.scale("x");
+      const sy = drawn.scale("y");
+      const lines = [];
+      for (const group of series) {
+        let run = [];
+        for (const d of points) {
+          if (d.series !== group.name) continue;
+          if (d.value === null) {
+            if (run.length) lines.push(run);
+            run = [];
+          } else {
+            run.push({ X: sx.apply(d.date), Y: sy.apply(d.value) });
+          }
+        }
+        if (run.length) lines.push(run);
+      }
+      return { rects: [], lines };
+    },
     x: { screen: "x", kind: "time" },
     y: { screen: "y", kind: "number" },
     // The value in the bucket that holds x, of the series named or the largest

@@ -258,6 +258,8 @@ def test_chart_description_documents_annotations():
     )
     assert "map: text" in description
     assert "annotate_chart" in description
+    # How callouts are laid out, so the model need not place them itself
+    assert "in order in a band above the chart" in description
     assert "option orientation: horizontal|vertical (default horizontal)" in description
 
 

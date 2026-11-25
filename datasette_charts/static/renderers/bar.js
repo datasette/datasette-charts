@@ -58,7 +58,8 @@ export function render(el, ctx) {
       }),
       Plot.ruleY([0], { stroke: theme.muted }),
     ];
-    if (!thumbnail && !negative && step >= 30) {
+    const showValues = !thumbnail && !negative && step >= 30;
+    if (showValues) {
       marks.push(
         Plot.text(bars, {
           x: "name",
@@ -69,8 +70,7 @@ export function render(el, ctx) {
         })
       );
     }
-    plot = Plot.plot(
-      basePlot(ctx, {
+    const options = basePlot(ctx, {
         marginLeft: thumbnail ? 6 : 56,
         marginRight: thumbnail ? 6 : 16,
         marginTop: thumbnail ? 6 : 20,
@@ -85,12 +85,26 @@ export function render(el, ctx) {
         },
         y: { label: meta.y, grid: !thumbnail, nice: true },
         marks,
-      })
-    );
-    annotate(el, ctx, plot, {
+      });
+    plot = annotate(el, ctx, (margins) => Plot.plot({ ...options, ...margins }), {
       x: { screen: "x", kind: "band", match },
       y: { screen: "y", kind: "number" },
       lookup,
+      // Each bar, and the value written above it
+      marks: (drawn) => {
+        const sx = drawn.scale("x");
+        const sy = drawn.scale("y");
+        return {
+          rects: bars
+            .filter((d) => d.value !== null)
+            .map((d) => {
+              const left = sx.apply(d.name);
+              const [a, b] = [sy.apply(0), sy.apply(d.value)];
+              return { left, right: left + sx.bandwidth, top: Math.min(a, b) - (showValues ? 16 : 0), bottom: Math.max(a, b) };
+            }),
+          lines: [],
+        };
+      },
     });
   } else {
     const longest = Math.max(0, ...names.map((name) => Math.min(name.length, MAX_LABEL)));
@@ -121,8 +135,7 @@ export function render(el, ctx) {
         })
       );
     }
-    plot = Plot.plot(
-      basePlot(ctx, {
+    const options = basePlot(ctx, {
         height,
         marginLeft,
         marginRight: thumbnail ? 6 : 56,
@@ -134,12 +147,26 @@ export function render(el, ctx) {
           tickSize: 0,
         },
         marks,
-      })
-    );
-    annotate(el, ctx, plot, {
+      });
+    plot = annotate(el, ctx, (margins) => Plot.plot({ ...options, ...margins }), {
       x: { screen: "y", kind: "band", match },
       y: { screen: "x", kind: "number" },
       lookup,
+      // Each bar, and the value written at its tip
+      marks: (drawn) => {
+        const sx = drawn.scale("x");
+        const sy = drawn.scale("y");
+        return {
+          rects: bars
+            .filter((d) => d.value !== null)
+            .map((d) => {
+              const top = sy.apply(d.name);
+              const [a, b] = [sx.apply(0), sx.apply(d.value)];
+              return { left: Math.min(a, b), right: Math.max(a, b) + (negative ? 0 : 44), top, bottom: top + sy.bandwidth };
+            }),
+          lines: [],
+        };
+      },
     });
   }
   mount(el, ctx, plot);

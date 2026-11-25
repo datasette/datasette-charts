@@ -69,10 +69,30 @@ export function render(el, ctx) {
       }),
     ];
   }
-  const plot = Plot.plot(basePlot(ctx, options));
-  annotate(el, ctx, plot, {
+  const plot = annotate(el, ctx, (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins })), {
     x: { screen: "x", kind: "number" },
     y: { screen: "y", kind: "number" },
+    // Each point, or each cell of the heatmap
+    marks: (drawn) => {
+      const sx = drawn.scale("x");
+      const sy = drawn.scale("y");
+      if (meta.mode === "points") {
+        return {
+          rects: data.map((d) => ({ left: sx.apply(d.x) - 3, right: sx.apply(d.x) + 3, top: sy.apply(d.y) - 3, bottom: sy.apply(d.y) + 3 })),
+          lines: [],
+        };
+      }
+      const xb = meta.x_bin;
+      const yb = meta.y_bin;
+      return {
+        rects: data.map((d) => {
+          const [x1, x2] = [sx.apply(xb.start + d.bx * xb.step), sx.apply(xb.start + (d.bx + 1) * xb.step)];
+          const [y1, y2] = [sy.apply(yb.start + d.by * yb.step), sy.apply(yb.start + (d.by + 1) * yb.step)];
+          return { left: Math.min(x1, x2), right: Math.max(x1, x2), top: Math.min(y1, y2), bottom: Math.max(y1, y2) };
+        }),
+        lines: [],
+      };
+    },
   });
   mount(el, ctx, plot);
 }

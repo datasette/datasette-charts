@@ -5,7 +5,9 @@
 // Suggestions and the builder both produce specs in the chart DSL, and the
 // server only ever compiles specs.
 
-import { copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { annotationSection } from "./annotation-editor.js";
+import { parseMoment } from "./renderers/annotations.js";
+import { chartLabel, chartLink, copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
 const SELECTED_PREFIX = "datasette-charts:selected:";
@@ -76,6 +78,42 @@ function withoutDerivedBins(spec) {
   }
   return copy;
 }
+
+// --- Carrying a chart through the SQL form ---------------------------------------
+// On a SQL query page, running edited SQL loads a new page. The open chart
+// goes with it, in the #chart= fragment of the form's action: a GET form
+// keeps its action's fragment, and so does Datasette's redirect from
+// /db?sql= to /db/-/query?sql=. Setting the action, rather than listening
+// for submit, also covers the editor's Shift+Enter and Cmd+Enter, which call
+// form.submit() and fire no submit event. Only this form carries the chart.
+
+function sqlForm() {
+  const form = document.querySelector("form.sql");
+  if (!form || (form.getAttribute("method") || "get").toLowerCase() !== "get") return null;
+  return form;
+}
+
+// `fragment` is "#chart=...", or null to carry nothing
+function carryThroughSqlForm(fragment) {
+  const form = sqlForm();
+  if (!form) return;
+  const action = (form.getAttribute("action") || "").split("#")[0];
+  form.setAttribute("action", fragment ? action + fragment : action);
+}
+
+// Arriving from this same page's SQL form, as opposed to following a link
+function cameFromSqlForm() {
+  try {
+    const before = new URL(document.referrer);
+    return before.origin === location.origin && before.pathname === location.pathname;
+  } catch (e) {
+    return false;
+  }
+}
+
+// A page whose chart cannot be drawn, such as one showing a SQL error, still
+// passes on the chart it was asked for, so fixing the SQL brings it back
+if (location.hash.startsWith(FRAGMENT)) carryThroughSqlForm(location.hash);
 
 // --- The panel ----------------------------------------------------------------
 
@@ -279,7 +317,9 @@ class ChartsPanel {
     } else {
       this.open({ spec, title: "", reason: "" });
     }
-    if (linked) this.scrollToView();
+    // Running edited SQL keeps the editor in view, rather than jumping to
+    // the chart it brought along
+    if (linked && !cameFromSqlForm()) this.scrollToView();
   }
 
   statusText(profile) {
@@ -389,6 +429,7 @@ class ChartsPanel {
       card.setAttribute("aria-pressed", card === chart.card ? "true" : "false");
     }
     this.current = chart;
+    this.lastResult = null;
     this.titleEl = h("h3", { class: "dc-title" }, chart.title || "Chart");
     this.reasonEl = h("p", { class: "dc-reason" }, chart.reason || "");
     this.chartEl = h("div", { class: "dc-chart", role: "img" });
@@ -417,6 +458,7 @@ class ChartsPanel {
   }
 
   close() {
+    carryThroughSqlForm(null);
     this.current = null;
     this.rememberSelection(null);
     this.view.hidden = true;
@@ -431,7 +473,10 @@ class ChartsPanel {
     const chart = this.current;
     const requestId = ++this.requestId;
     // The spec lives in the URL fragment, so a chart can be linked to
-    history.replaceState(null, "", FRAGMENT + encodeURIComponent(JSON.stringify(chart.spec)));
+    const fragment = FRAGMENT + encodeURIComponent(JSON.stringify(chart.spec));
+    history.replaceState(null, "", fragment);
+    // The chart as it is now, edits included, goes with edited SQL
+    carryThroughSqlForm(fragment);
     this.rememberSelection(chart.spec);
     // While data reloads the previous chart stays, dimmed: no layout jump
     this.chartEl.classList.add("dc-loading");
@@ -441,6 +486,10 @@ class ChartsPanel {
     const result = await this.draw(holder, chart.spec, "full", this.chartEl);
     if (requestId !== this.requestId || chart !== this.current) return;
     this.chartEl.classList.remove("dc-loading");
+    const hadResult = !!this.lastResult;
+    this.lastResult = result.ok ? result : null;
+    // The annotation list describes values with the chart's own column names
+    if (!hadResult && result.ok && (chart.spec.annotations || []).length) this.renderBuilder();
     if (!result.ok) {
       // The spec cannot be drawn, so the previous chart must not stay up
       this.chartEl.replaceChildren();
@@ -461,7 +510,7 @@ class ChartsPanel {
     chart.title = result.title;
     this.titleEl.textContent = result.title;
     this.reasonEl.textContent = chart.reason || "";
-    this.chartEl.setAttribute("aria-label", [result.title, chart.reason].filter(Boolean).join(". "));
+    this.chartEl.setAttribute("aria-label", chartLabel(result, chart.reason));
     this.noteEl.classList.remove("dc-error");
     this.noteEl.textContent = truncationNote(result);
     this.renderLinks(result);
@@ -472,7 +521,16 @@ class ChartsPanel {
     const links = [];
     if (result.sql_url) links.push(h("a", { href: result.sql_url }, "This chart's SQL"));
     links.push(
-      copyButton("Copy link to this chart", "Link copied", () => location.href, "Copy the address from the address bar"),
+      // Built from this page and the chart's own spec, not the address bar:
+      // inside Datasette Agent's panel this page is in a frame, and the
+      // address bar shows the conversation
+      copyButton(
+        "Copy link",
+        "Link copied",
+        () => chartLink(location.href, this.current.spec),
+        "Copy this link:",
+        "Copy link to this chart"
+      ),
       ...copyDataButtons(result)
     );
     this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links));
@@ -535,6 +593,53 @@ class ChartsPanel {
     return { v: 1, type: typeName, encoding, options };
   }
 
+  // Annotations carry over to a new chart type that can draw them, if
+  // their values still make sense on its axes
+  keptAnnotations(typeName, annotations) {
+    const support = (this.types[typeName] || {}).annotations || {};
+    const allowed = support.types || [];
+    const axes = support.axes || {};
+    const fits = (annotation, key) => {
+      if (!(key in annotation)) return true;
+      const axis = axes[key[0]];
+      const value = annotation[key];
+      if (!axis) return false;
+      if (axis === "number") return typeof value === "number";
+      if (axis === "time") return !!parseMoment(value);
+      return true;
+    };
+    return (annotations || []).filter(
+      (annotation) =>
+        annotation &&
+        allowed.includes(annotation.type) &&
+        ["x", "x2", "y", "y2"].every((key) => fits(annotation, key)) &&
+        (!annotation.series || support.series)
+    );
+  }
+
+  // Called by the annotation editor with the chart's new annotations.
+  // `focus` is the index of the one to put focus on, or "add".
+  setAnnotations(annotations, focus) {
+    const chart = this.current;
+    if (annotations.length) chart.spec.annotations = annotations;
+    else delete chart.spec.annotations;
+    this.edited();
+    this.renderBuilder();
+    const target =
+      focus === "add" || focus === undefined || focus === null
+        ? this.builderEl.querySelector("[data-annotation-add]")
+        : this.builderEl.querySelector(`[data-annotation-edit="${focus}"]`);
+    if (target) target.focus();
+    this.drawCurrent();
+  }
+
+  // An edited chart is no longer the suggestion it started as
+  edited() {
+    this.current.reason = "";
+    this.current.card = null;
+    for (const card of this.strip.querySelectorAll(".dc-card")) card.setAttribute("aria-pressed", "false");
+  }
+
   renderBuilder() {
     const spec = this.current.spec;
     const type = this.types[spec.type];
@@ -570,6 +675,10 @@ class ChartsPanel {
           )
         );
       }
+    }
+    if (type) {
+      const annotations = annotationSection(this);
+      if (annotations) fields.push(annotations);
     }
     this.builderEl.replaceChildren(...fields);
     if (focused && this.builderEl.elements[focused]) this.builderEl.elements[focused].focus();
@@ -678,8 +787,11 @@ class ChartsPanel {
     const chart = this.current;
     const spec = chart.spec;
     const [first, field] = control.name.split(".");
+    if (!control.name) return; // not one of the builder's own controls
     if (control.name === "type") {
       chart.spec = this.defaultSpec(control.value, spec.encoding);
+      const annotations = this.keptAnnotations(control.value, spec.annotations);
+      if (annotations.length) chart.spec.annotations = annotations;
     } else if (first === "option") {
       spec.options = { ...(spec.options || {}), [field]: control.value };
     } else {
@@ -716,10 +828,7 @@ class ChartsPanel {
         encoding[field] = control.value;
       }
     }
-    // An edited chart is no longer the suggestion it started as
-    chart.reason = "";
-    chart.card = null;
-    for (const card of this.strip.querySelectorAll(".dc-card")) card.setAttribute("aria-pressed", "false");
+    this.edited();
     this.renderBuilder();
     this.drawCurrent();
   }

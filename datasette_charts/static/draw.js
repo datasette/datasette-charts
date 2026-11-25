@@ -81,19 +81,35 @@ export async function drawChart(el, { urls, types, source, spec, size = "full", 
     size,
   });
   if (!result.ok) return result;
+  return renderChart(el, { urls, types, spec, result, size, measureFrom });
+}
+
+// Draws rows already fetched for a spec. Annotations do not change the rows,
+// so a spec that differs only in its annotations can be drawn again from the
+// same result without asking the server. The result comes back with
+// `annotationNotes`, saying which annotations could not be placed, and
+// `annotationText`, the text of the ones that were.
+export async function renderChart(el, { urls, types, spec, result, size = "full", measureFrom }) {
   const type = types[spec.type];
+  const ctx = {
+    spec,
+    rows: result.rows,
+    columns: result.columns,
+    data: result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]]))),
+    meta: result.meta || {},
+    size,
+    annotationNotes: [],
+    annotationText: [],
+    annotationKey: [],
+    annotationCaptions: [],
+  };
   try {
     const [{ Plot, d3 }, renderer] = await Promise.all([loadPlot(urls), import(type.js_url)]);
     const thumbnail = size === "thumbnail";
     const box = measureFrom || el;
     const width = thumbnail ? THUMBNAIL.width : Math.max(320, Math.floor(box.clientWidth));
     await renderer.render(el, {
-      spec,
-      rows: result.rows,
-      columns: result.columns,
-      data: result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]]))),
-      meta: result.meta || {},
-      size,
+      ...ctx,
       width,
       height: thumbnail ? THUMBNAIL.height : FULL_HEIGHT,
       Plot,
@@ -101,43 +117,148 @@ export async function drawChart(el, { urls, types, source, spec, size = "full", 
       theme: themeFor(box),
       urls,
       loadScript,
+      // Renderers add to these
+      annotationNotes: ctx.annotationNotes,
+      annotationText: ctx.annotationText,
+      annotationKey: ctx.annotationKey,
+      annotationCaptions: ctx.annotationCaptions,
     });
+    // Notes with no clear room on the plot go under it, as captions
+    for (const caption of ctx.annotationCaptions) el.append(h("p", { class: "dc-annotation-caption" }, caption));
+    // Labels with no room on the plot or in lanes beside it are
+    // numbered on the chart, and their texts listed under it
+    if (ctx.annotationKey.length) el.append(annotationKeyList(ctx.annotationKey));
   } catch (e) {
     console.error("datasette-charts could not draw a chart", e);
     return { ok: false, error: "This chart could not be drawn" };
   }
-  return result;
+  return { ...result, annotationNotes: ctx.annotationNotes, annotationText: ctx.annotationText };
+}
+
+// The numbered key for callouts drawn as numbered markers. Real text, so it
+// wraps, can be selected and is read out.
+function annotationKeyList(key) {
+  return h(
+    "ol",
+    { class: "dc-annotation-key", "aria-label": "Notes on the chart" },
+    key.map((item) =>
+      h(
+        "li",
+        { value: item.number },
+        h("span", { class: "dc-annotation-key-number", "aria-hidden": "true", style: `background:${item.color};color:${item.surface}` }, String(item.number)),
+        h("span", { class: "dc-annotation-key-text" }, item.text)
+      )
+    )
+  );
+}
+
+// The text alternative for a drawn chart: its title, then its annotations
+export function chartLabel(result, ...extra) {
+  const parts = [result.title, ...extra].filter(Boolean);
+  if (result.annotationText && result.annotationText.length) {
+    parts.push(`Annotations: ${result.annotationText.join("; ")}`);
+  }
+  return parts.join(". ");
 }
 
 export function truncationNote(result) {
-  if (!result.truncated) return "";
-  return `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`;
+  const notes = [];
+  if (result.truncated) {
+    notes.push(
+      `Only the first ${count(result.rows.length, "row")} of this chart's data ${result.rows.length === 1 ? "is" : "are"} shown.`
+    );
+  }
+  for (const note of result.annotationNotes || []) notes.push(`${note}.`);
+  return notes.join(" ");
+}
+
+// Copies text to the clipboard. The Clipboard API only exists on secure
+// pages: over plain HTTP, such as a Datasette reached by a LAN or Tailscale
+// address, it is missing, so the older execCommand("copy") is used instead.
+// That has to run during the click, before anything is awaited.
+function copyWithSelection(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none";
+  const focused = document.activeElement;
+  document.body.append(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (e) {
+    ok = false;
+  }
+  area.remove();
+  if (focused && focused.focus) focused.focus({ preventScroll: true });
+  return ok;
+}
+
+export async function copyText(text) {
+  if (!(navigator.clipboard && window.isSecureContext)) return copyWithSelection(text);
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    return copyWithSelection(text);
+  }
 }
 
 // A button that copies text to the clipboard, says whether it worked, then
-// goes back to its own label
-export function copyButton(label, done, getText, failed = "Could not copy") {
+// goes back to its own label. If nothing can be copied, the text is shown
+// beside the button, selected, to be copied by hand. `name` is a fuller
+// accessible name for a short label, such as "Copy link to this chart" for
+// "Copy link".
+export function copyButton(label, done, getText, failed = "Could not copy", name = null) {
   let timer = null;
-  return h(
+  const button = h(
     "button",
     {
       type: "button",
       class: "dc-link",
-      onclick: async (event) => {
-        const button = event.currentTarget;
-        let ok = true;
-        try {
-          await navigator.clipboard.writeText(getText());
-        } catch (e) {
-          ok = false;
-        }
+      "aria-label": name,
+      title: name,
+      onclick: async () => {
+        const text = getText();
+        const ok = await copyText(text);
+        // What it says now is what it is called now, for screen readers too
         button.textContent = ok ? done : failed;
+        if (name) button.setAttribute("aria-label", ok ? done : failed);
         clearTimeout(timer);
-        timer = setTimeout(() => (button.textContent = label), ok ? 2000 : 5000);
+        timer = setTimeout(() => {
+          button.textContent = label;
+          if (name) button.setAttribute("aria-label", name);
+        }, ok ? 2000 : 5000);
+        const previous = button.nextElementSibling;
+        if (previous && previous.classList.contains("dc-copy-fallback")) previous.remove();
+        if (!ok) {
+          const multiline = text.includes("\n");
+          const field = h(multiline ? "textarea" : "input", {
+            class: "dc-copy-fallback",
+            readonly: true,
+            rows: multiline ? 4 : null,
+            "aria-label": `${label}: select and copy this`,
+          });
+          field.value = text;
+          button.after(field);
+          field.focus();
+          field.select();
+        }
       },
     },
     label
   );
+  return button;
+}
+
+// The absolute address of a chart: its source's page, with the spec, and any
+// annotations, in the #chart= fragment. `page` is that page's address, with
+// or without a fragment.
+export function chartLink(page, spec) {
+  const url = new URL(page, location.href);
+  url.hash = "chart=" + encodeURIComponent(JSON.stringify(spec));
+  return url.href;
 }
 
 function delimited(result, separator) {

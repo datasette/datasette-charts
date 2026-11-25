@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import math
 
+from .annotations import validate_annotations
 from .sqlgen import AGGREGATES, MAX_BINS, SORTS, TIME_UNITS
 
 DSL_VERSION = 1
-SPEC_KEYS = {"v", "type", "encoding", "options"}
+SPEC_KEYS = {"v", "type", "encoding", "options", "annotations"}
 CHANNEL_KEYS = {"column", "aggregate", "timeUnit", "bin", "limit", "other", "sort"}
 MAX_LIMIT = 100
 
@@ -52,6 +53,8 @@ def validate_spec(spec, chart_types: dict, columns: list) -> list:
         errors.append("options must be an object")
         return errors
     errors.extend(chart_type.validate(spec, columns))
+    if "annotations" in spec:
+        errors.extend(validate_annotations(chart_type, spec["annotations"]))
     return errors
 
 

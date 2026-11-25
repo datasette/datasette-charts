@@ -9,7 +9,10 @@ import {
   bucketToDate,
   fmtBucket,
   allBuckets,
+  stepDate,
+  valueAxisMargin,
 } from "./common.js";
+import { annotate, parseMoment } from "./annotations.js";
 
 // Aggregates where a time bucket with no rows really is zero
 const ZERO_WHEN_EMPTY = new Set(["count", "sum", "count_distinct"]);
@@ -59,7 +62,7 @@ export function render(el, ctx) {
 
   const marks = [];
   const options = {
-    marginLeft: thumbnail ? 6 : 56,
+    marginLeft: thumbnail ? 6 : valueAxisMargin(points.map((d) => d.value), getComputedStyle(el).fontFamily),
     x: { type: "utc", label: null },
     y: { label: meta.y, grid: !thumbnail, nice: true, zero: fillZero },
   };
@@ -129,5 +132,44 @@ export function render(el, ctx) {
   }
 
   options.marks = marks;
-  mount(el, ctx, Plot.plot(basePlot(ctx, options)));
+  const plot = annotate(el, ctx, (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins })), {
+    // Each series as drawn, broken where values are missing
+    marks: (drawn) => {
+      const sx = drawn.scale("x");
+      const sy = drawn.scale("y");
+      const lines = [];
+      for (const group of series) {
+        let run = [];
+        for (const d of points) {
+          if (d.series !== group.name) continue;
+          if (d.value === null) {
+            if (run.length) lines.push(run);
+            run = [];
+          } else {
+            run.push({ X: sx.apply(d.date), Y: sy.apply(d.value) });
+          }
+        }
+        if (run.length) lines.push(run);
+      }
+      return { rects: [], lines };
+    },
+    x: { screen: "x", kind: "time" },
+    y: { screen: "y", kind: "number" },
+    // The value in the bucket that holds x, of the series named or the largest
+    lookup: (annotation) => {
+      const period = parseMoment(annotation.x);
+      if (!period) return null;
+      const name = hasSeries ? (annotation.series ?? (series[0] && series[0].name)) : SINGLE;
+      const time = period.start.getTime();
+      const point = points.find(
+        (d) =>
+          d.series === String(name) &&
+          d.date.getTime() <= time &&
+          time < stepDate(d.date, unit).getTime() &&
+          d.value !== null
+      );
+      return point ? { x: point.date, y: point.value } : null;
+    },
+  });
+  mount(el, ctx, plot);
 }

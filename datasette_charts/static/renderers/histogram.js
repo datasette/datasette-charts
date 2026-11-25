@@ -1,4 +1,5 @@
-import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel } from "./common.js";
+import { TIP, basePlot, mount, fmt, isThumbnail, looksLikeYears, xLabel, valueAxisMargin } from "./common.js";
+import { annotate } from "./annotations.js";
 
 // rows: bucket, n.
 //
@@ -44,9 +45,8 @@ export function render(el, ctx) {
     return { ...bin, n: d.n, label };
   });
 
-  const plot = Plot.plot(
-    basePlot(ctx, {
-      marginLeft: thumbnail ? 6 : 56,
+  const options = basePlot(ctx, {
+      marginLeft: thumbnail ? 6 : valueAxisMargin(bins.map((d) => d.n), getComputedStyle(el).fontFamily),
       x: {
         ...xLabel(meta.column),
         type: log ? "log" : "linear",
@@ -69,7 +69,23 @@ export function render(el, ctx) {
         }),
         Plot.ruleY([0], { stroke: theme.muted }),
       ],
-    })
-  );
+    });
+  const plot = annotate(el, ctx, (margins) => Plot.plot({ ...options, ...margins }), {
+    x: { screen: "x", kind: "number" },
+    y: { screen: "y", kind: "number" },
+    marks: (drawn) => {
+      const sx = drawn.scale("x");
+      const sy = drawn.scale("y");
+      return {
+        rects: bins.map((d) => ({ left: sx.apply(d.x1), right: sx.apply(d.x2), top: sy.apply(d.n), bottom: sy.apply(0) })),
+        lines: [],
+      };
+    },
+    // The bin that holds x: the point goes on top of its bar
+    lookup: (annotation) => {
+      const bin = bins.find((d) => d.x1 <= annotation.x && annotation.x < d.x2);
+      return bin ? { x: (bin.x1 + bin.x2) / 2, y: bin.n } : null;
+    },
+  });
   mount(el, ctx, plot);
 }

@@ -41,6 +41,9 @@ class Scatter(BuiltinChartType):
         Channel(name="y", label="Y axis", roles=("measure",), binnable=True),
     ]
     max_rows = RAW_POINT_LIMIT
+    annotation_axes = {"x": "number", "y": "number"}
+    # There is no one y for an x to look up
+    annotation_lookup = False
 
     def _binned(self, profile) -> bool:
         if profile is None or profile.row_count is None:

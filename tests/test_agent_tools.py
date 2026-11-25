@@ -8,6 +8,7 @@ pytest.importorskip("datasette_agent")
 from datasette_agent.tools import get_agent_tools  # noqa: E402
 
 from datasette_charts import api  # noqa: E402
+from urllib.parse import unquote  # noqa: E402
 
 LINE = {
     "type": "line",
@@ -233,3 +234,236 @@ async def test_embed_html_escapes_its_config(ds):
     assert (
         await ds.client.get("/-/static-plugins/datasette-charts/draw.js")
     ).status_code == 200
+
+
+# --- Annotations ---------------------------------------------------------------
+
+BAR_BY_YEAR = {
+    "type": "bar",
+    "encoding": {
+        "x": {"column": "built_year", "sort": "key", "limit": 100, "other": False},
+        "y": {"aggregate": "count"},
+    },
+    "options": {"orientation": "vertical"},
+}
+
+
+def test_chart_description_documents_annotations():
+    from datasette_charts.agent_tools import chart_description
+    from datasette_charts.chart_types import BUILTIN_CHART_TYPES
+
+    description = chart_description({cls.name: cls() for cls in BUILTIN_CHART_TYPES})
+    assert (
+        '"annotations": [{"type": "line", "x": 2009, "position": "after"' in description
+    )
+    assert "map: text" in description
+    assert "annotate_chart" in description
+    # How callouts are laid out, so the model need not place them itself
+    assert "in order in a band above the chart" in description
+    assert "option orientation: horizontal|vertical (default horizontal)" in description
+
+
+@pytest.mark.asyncio
+async def test_chart_with_annotations(ds):
+    spec = {
+        **BAR_BY_YEAR,
+        "annotations": [
+            {"type": "line", "x": 1990, "position": "after", "text": "Rule enacted"}
+        ],
+    }
+    result = await call(ds, "chart", database="shop", table="places", spec=spec)
+    assert result["ok"] is True
+    assert "annotation_warnings" not in result
+    fragment = result["chart_path"].partition("#chart=")[2]
+    assert json.loads(unquote(fragment))["annotations"] == spec["annotations"]
+    assert (
+        "Rule enacted" in unquote(result["_html"]) or "Rule enacted" in result["_html"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_chart_reports_invalid_annotations(ds):
+    spec = {
+        **BAR_BY_YEAR,
+        "annotations": [{"type": "line", "x": 1990, "colour": "red"}],
+    }
+    result = await call(ds, "chart", database="shop", table="places", spec=spec)
+    assert result["ok"] is False
+    assert result["errors"] == [
+        "annotations[0]: a line annotation has no colour - it takes anchor, color, "
+        "position, stroke, text, x, y"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chart_warns_about_categories_not_on_the_chart(ds):
+    spec = {
+        **BAR_BY_YEAR,
+        "annotations": [{"type": "range", "x": 1990, "x2": 2031, "text": "Era"}],
+    }
+    result = await call(ds, "chart", database="shop", table="places", spec=spec)
+    assert result["ok"] is True
+    (warning,) = result["annotation_warnings"]
+    assert warning.startswith(
+        "annotations[0]: x2 2031 is not one of the chart's x values, so it is not "
+        "drawn. They are: 1950, 1951,"
+    )
+
+
+async def first_chart(ds, spec):
+    result = await call(ds, "chart", database="shop", table="places", spec=spec)
+    assert result["ok"] is True
+    return result["chart_path"]
+
+
+def annotations_in(path):
+    return json.loads(unquote(path.partition("#chart=")[2])).get("annotations")
+
+
+@pytest.mark.asyncio
+async def test_annotate_chart_adds_updates_and_removes(ds):
+    path = await first_chart(ds, BAR_BY_YEAR)
+    added = await call(
+        ds,
+        "annotate_chart",
+        chart_path=path,
+        add=[
+            {"type": "line", "x": 1990, "position": "after", "text": "Rule"},
+            {"type": "line", "y": 5, "text": "Target"},
+        ],
+    )
+    assert added["ok"] is True
+    assert added["annotations"] == [
+        {"index": 0, "type": "line", "x": 1990, "position": "after", "text": "Rule"},
+        {"index": 1, "type": "line", "y": 5, "text": "Target"},
+    ]
+    assert annotations_in(added["chart_path"]) == [
+        {"type": "line", "x": 1990, "position": "after", "text": "Rule"},
+        {"type": "line", "y": 5, "text": "Target"},
+    ]
+    assert "<datasette-chart " in added["_html"]
+
+    updated = await call(
+        ds,
+        "annotate_chart",
+        chart_path=added["chart_path"],
+        update=[{"index": 0, "text": "Rule enacted", "position": None}],
+        remove=[1],
+        add=[{"type": "text", "left": 0.02, "top": 0.05, "text": "Source: test"}],
+    )
+    assert updated["ok"] is True
+    assert annotations_in(updated["chart_path"]) == [
+        {"type": "line", "x": 1990, "text": "Rule enacted"},
+        {"type": "text", "left": 0.02, "top": 0.05, "text": "Source: test"},
+    ]
+
+    cleared = await call(
+        ds, "annotate_chart", chart_path=updated["chart_path"], annotations=[]
+    )
+    assert cleared["ok"] is True
+    assert cleared["annotations"] == []
+    assert annotations_in(cleared["chart_path"]) is None
+
+
+@pytest.mark.asyncio
+async def test_annotate_chart_takes_the_page_the_user_has_open(ds):
+    # The address of a chart page, as the agent's panel reports it
+    path = await first_chart(ds, BAR_BY_YEAR)
+    result = await call(
+        ds,
+        "annotate_chart",
+        chart_path="http://localhost:8001" + path,
+        add=[{"type": "point", "x": 1960, "text": "Busy year"}],
+    )
+    assert result["ok"] is True
+    assert result["chart_path"].startswith("/shop/places#chart=")
+
+
+@pytest.mark.asyncio
+async def test_annotate_chart_keeps_filters_and_queries(ds):
+    filtered = await call(
+        ds,
+        "chart",
+        database="shop",
+        table="orders",
+        filters={"status": "paid"},
+        spec=LINE,
+    )
+    result = await call(
+        ds,
+        "annotate_chart",
+        chart_path=filtered["chart_path"],
+        add=[{"type": "line", "x": "2024-01", "text": "New year"}],
+    )
+    assert result["ok"] is True
+    assert result["rows"] == filtered["rows"]
+    assert result["chart_path"].startswith("/shop/orders?status=paid#chart=")
+
+    sql = await call(
+        ds,
+        "chart",
+        database="shop",
+        sql="select * from orders where price > :low",
+        params={"low": 50},
+        spec=LINE,
+    )
+    result = await call(
+        ds,
+        "annotate_chart",
+        chart_path=sql["chart_path"],
+        add=[{"type": "line", "y": 10, "text": "Ten"}],
+    )
+    assert result["ok"] is True
+    assert result["rows"] == sql["rows"]
+    assert "&low=50#chart=" in result["chart_path"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "arguments,error",
+    [
+        ({"chart_path": "/shop/places"}, "chart_path must be a link to a chart"),
+        ({"chart_path": "/nope/places#chart={}", "add": []}, "Database not found"),
+        ({}, "Give add, update, remove or annotations"),
+        (
+            {"remove": [3]},
+            "remove: 3 is not the index of an annotation. This chart has none",
+        ),
+        ({"update": [{"text": "x"}]}, "Each update needs an index"),
+        (
+            {"annotations": [], "add": [{"type": "line", "y": 1}]},
+            "Give annotations to replace them all, or add, update and remove - not both",
+        ),
+        ({"add": [{"type": "line"}]}, "Invalid spec"),
+    ],
+)
+async def test_annotate_chart_errors(ds, arguments, error):
+    path = await first_chart(ds, BAR_BY_YEAR)
+    arguments = {"chart_path": path, **arguments}
+    result = await call(ds, "annotate_chart", **arguments)
+    assert result["ok"] is False
+    assert error in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_annotate_chart_applies_the_actors_permissions(db_path):
+    ds = Datasette(
+        [db_path],
+        config={
+            "databases": {"shop": {"tables": {"places": {"allow": {"id": "analyst"}}}}}
+        },
+    )
+    await ds.invoke_startup()
+    path = "/shop/places#chart=" + json.dumps({"v": 1, **BAR_BY_YEAR})
+    denied = await call(
+        ds, "annotate_chart", chart_path=path, add=[{"type": "line", "y": 1}]
+    )
+    assert denied == {"ok": False, "error": "Permission denied"}
+    allowed = await call(
+        ds,
+        "annotate_chart",
+        actor={"id": "analyst"},
+        chart_path=path,
+        add=[{"type": "line", "y": 1}],
+    )
+    assert allowed["ok"] is True

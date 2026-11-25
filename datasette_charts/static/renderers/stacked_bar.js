@@ -11,7 +11,9 @@ import {
   stepDate,
   fmtBucket,
   xLabel,
+  valueAxisMargin,
 } from "./common.js";
+import { annotate, bandMatcher, parseMoment } from "./annotations.js";
 
 const ROW_HEIGHT = 24;
 const MAX_LABEL = 28;
@@ -30,6 +32,7 @@ export function render(el, ctx) {
   const totals = new Map();
   const others = new Set();
   const keys = [];
+  const rawKeys = new Map();
   const items = [];
   for (const d of data) {
     const series = categoryName(d.series, d.series_is_other, d.series_label);
@@ -44,6 +47,7 @@ export function render(el, ctx) {
     } else {
       item.key = categoryName(d.key, d.key_is_other, d.key_label);
       if (!keys.includes(item.key)) keys.push(item.key);
+      if (!d.key_is_other) rawKeys.set(item.key, d.key);
     }
     items.push(item);
   }
@@ -64,7 +68,12 @@ export function render(el, ctx) {
 
   if (temporal) {
     Object.assign(options, {
-      marginLeft: thumbnail ? 6 : 56,
+      marginLeft: thumbnail
+        ? 6
+        : valueAxisMargin(
+            [...shown.reduce((totals, d) => totals.set(d.date.getTime(), (totals.get(d.date.getTime()) || 0) + (d.value || 0)), new Map()).values()],
+            getComputedStyle(el).fontFamily
+          ),
       x: { type: "utc", label: null },
       y: { label: meta.y, grid: !thumbnail, nice: true },
       marks: [
@@ -120,5 +129,72 @@ export function render(el, ctx) {
       });
     }
   }
-  mount(el, ctx, Plot.plot(basePlot(ctx, options)));
+  const make = (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins }));
+  const match = temporal ? null : bandMatcher(visibleKeys, visibleKeys.map((key) => rawKeys.get(key)));
+  // The top of the stack at x, or of the named series' segment in it
+  const lookup = (annotation) => {
+    let key = null;
+    let date = null;
+    if (temporal) {
+      const period = parseMoment(annotation.x);
+      if (!period) return null;
+      const time = period.start.getTime();
+      const hit = shown.find((d) => d.date.getTime() <= time && time < d.end.getTime());
+      if (!hit) return null;
+      date = hit.date;
+    } else {
+      key = match(annotation.x);
+      if (key === null) return null;
+    }
+    const here = shown.filter((d) => (temporal ? d.date.getTime() === date.getTime() : d.key === key));
+    let total = 0;
+    let found = annotation.series === undefined;
+    for (const d of here) {
+      total += d.value || 0;
+      if (annotation.series !== undefined && d.series === String(annotation.series)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found || !here.length) return null;
+    if (temporal) return { x: new Date((date.getTime() + here[0].end.getTime()) / 2), y: total };
+    return { x: key, y: total };
+  };
+  // Each whole stack, or each group of bars
+  const marks = (drawn) => {
+    const stacks = new Map();
+    for (const d of shown) {
+      const key = temporal ? d.date.getTime() : d.key;
+      const stack = stacks.get(key) || { d, low: 0, high: 0 };
+      if ((d.value || 0) >= 0) stack.high += d.value || 0;
+      else stack.low += d.value;
+      stack.high = grouped ? Math.max(stack.high, d.value || 0) : stack.high;
+      stacks.set(key, stack);
+    }
+    const rects = [];
+    for (const { d, low, high } of stacks.values()) {
+      if (temporal) {
+        const sx = drawn.scale("x");
+        const sy = drawn.scale("y");
+        const [a, b] = [sy.apply(low), sy.apply(high)];
+        rects.push({ left: sx.apply(d.date), right: sx.apply(d.end), top: Math.min(a, b), bottom: Math.max(a, b) });
+      } else {
+        const sx = drawn.scale("x");
+        const band = drawn.scale(grouped ? "fy" : "y");
+        const top = band.apply(d.key);
+        const [a, b] = [sx.apply(low), sx.apply(high)];
+        rects.push({ left: Math.min(a, b), right: Math.max(a, b), top, bottom: top + band.bandwidth });
+      }
+    }
+    return { rects, lines: [] };
+  };
+  const plot = annotate(el, ctx, make, {
+    marks,
+    x: temporal
+      ? { screen: "x", kind: "time" }
+      : { screen: grouped ? "fy" : "y", kind: "band", match },
+    y: { screen: temporal ? "y" : "x", kind: "number" },
+    lookup: grouped ? null : lookup,
+  });
+  mount(el, ctx, plot);
 }

@@ -1,4 +1,5 @@
 import { TIP, basePlot, mount, fmt, isThumbnail } from "./common.js";
+import { annotate } from "./annotations.js";
 
 // How to draw the map, and where a basemap comes from, is an open question
 // in the spec. This first version draws points over a coarse world land
@@ -92,5 +93,7 @@ export async function render(el, ctx) {
     marks,
   });
   if (!thumbnail) delete options.height; // Plot picks one to suit the projection
-  mount(el, ctx, Plot.plot(options));
+  // No axes: only free-floating text notes
+  const plot = annotate(el, ctx, Plot.plot(options), {});
+  mount(el, ctx, plot);
 }

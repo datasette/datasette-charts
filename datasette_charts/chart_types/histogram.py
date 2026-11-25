@@ -47,6 +47,8 @@ class Histogram(BuiltinChartType):
         "scale": {"label": "Scale", "values": ["linear", "log"], "default": "linear"}
     }
     max_rows = 202
+    # y is the number of rows in each bin
+    annotation_axes = {"x": "number", "y": "number"}
 
     def propose(self, profile) -> list:
         candidates = []

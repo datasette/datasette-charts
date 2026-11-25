@@ -645,6 +645,7 @@ Every chart type must guarantee an upper bound on the rows it returns, independe
 - `type`: a registered chart type name.
 - `encoding`: one entry per channel the chart type declares.
 - `options`: chart-type-specific settings. Each chart type validates its own.
+- `annotations`: optional notes drawn over the chart (below).
 
 Channel fields (the vocabulary borrows from Vega-Lite's encoding terms where they fit):
 
@@ -656,6 +657,8 @@ Channel fields (the vocabulary borrows from Vega-Lite's encoding terms where the
 | `bin` | `{"maxbins": 40}` or explicit `{"start": 0, "step": 50}` |
 | `limit`, `other` | Keep the top N values; optionally fold the rest into "Other" |
 | `sort` | Ordering for categorical axes |
+
+A spec can also carry `annotations`: a list of notes drawn over the chart, such as `{"type": "line", "x": 2009, "position": "after", "text": "Rule enacted"}`. The types are `line` (at an x or a y value), `range` (between two x or two y values), `point` (a callout on a data point) and `text` (placed by fractions of the plot area). They do not affect the compiled SQL: the renderer draws them over the rows it gets, using the scales it drew with, and skips any whose values are not on the chart. All of a chart's annotation labels are laid out together: beside what they label when they all fit there clear of the data and of each other, otherwise in lanes outside the plot (with text notes as captions under the chart), otherwise as numbered badges with a key under the chart. Each chart type declares which annotation types it draws and what its x and y are (`category`, `time` or `number`), and the server validates them against that like the rest of the spec. The README documents the format.
 
 Suggested specs carry explicit bin parameters computed from the profile, so they compile to a single cheap query. A spec with only `maxbins` is also valid; the compiler then computes bounds itself in a CTE at the cost of an extra scan.
 

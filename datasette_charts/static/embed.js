@@ -5,7 +5,7 @@
 // the spec and the endpoint URLs. The rows are fetched as whoever is looking
 // at the page, so the data endpoint's permission checks apply to them.
 
-import { copyDataButtons, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { chartLabel, chartLink, copyButton, copyDataButtons, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 // One request for the chart types, however many charts a page shows
 const typeRequests = new Map();
@@ -75,12 +75,24 @@ class DatasetteChart extends HTMLElement {
     }
     holder.style.cssText = "";
     this.chartEl.replaceChildren(holder);
-    this.chartEl.setAttribute("aria-label", result.title);
+    this.chartEl.setAttribute("aria-label", chartLabel(result));
     this.titleEl.textContent = result.title;
     this.noteEl.classList.remove("dc-error");
     this.noteEl.textContent = truncationNote(result);
     const links = [];
-    if (this.config.chart_url) links.push(h("a", { href: this.config.chart_url }, "Open in the chart builder"));
+    if (this.config.chart_url) {
+      links.push(h("a", { href: this.config.chart_url }, "Open in the chart builder"));
+      // The same link, absolute, for pasting elsewhere
+      links.push(
+        copyButton(
+          "Copy link",
+          "Link copied",
+          () => chartLink(this.config.chart_url, spec),
+          "Copy this link:",
+          "Copy link to this chart"
+        )
+      );
+    }
     if (result.sql_url) links.push(h("a", { href: result.sql_url }, "This chart's SQL"));
     links.push(...copyDataButtons(result));
     this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links));

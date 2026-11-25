@@ -146,30 +146,84 @@ export function truncationNote(result) {
   return notes.join(" ");
 }
 
+// Copies text to the clipboard. The Clipboard API only exists on secure
+// pages: over plain HTTP, such as a Datasette reached by a LAN or Tailscale
+// address, it is missing, so the older execCommand("copy") is used instead.
+// That has to run during the click, before anything is awaited.
+function copyWithSelection(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none";
+  const focused = document.activeElement;
+  document.body.append(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (e) {
+    ok = false;
+  }
+  area.remove();
+  if (focused && focused.focus) focused.focus({ preventScroll: true });
+  return ok;
+}
+
+export async function copyText(text) {
+  if (!(navigator.clipboard && window.isSecureContext)) return copyWithSelection(text);
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    return copyWithSelection(text);
+  }
+}
+
 // A button that copies text to the clipboard, says whether it worked, then
-// goes back to its own label
+// goes back to its own label. If nothing can be copied, the text is shown
+// beside the button, selected, to be copied by hand.
 export function copyButton(label, done, getText, failed = "Could not copy") {
   let timer = null;
-  return h(
+  const button = h(
     "button",
     {
       type: "button",
       class: "dc-link",
-      onclick: async (event) => {
-        const button = event.currentTarget;
-        let ok = true;
-        try {
-          await navigator.clipboard.writeText(getText());
-        } catch (e) {
-          ok = false;
-        }
+      onclick: async () => {
+        const text = getText();
+        const ok = await copyText(text);
         button.textContent = ok ? done : failed;
         clearTimeout(timer);
         timer = setTimeout(() => (button.textContent = label), ok ? 2000 : 5000);
+        const previous = button.nextElementSibling;
+        if (previous && previous.classList.contains("dc-copy-fallback")) previous.remove();
+        if (!ok) {
+          const multiline = text.includes("\n");
+          const field = h(multiline ? "textarea" : "input", {
+            class: "dc-copy-fallback",
+            readonly: true,
+            rows: multiline ? 4 : null,
+            "aria-label": `${label}: select and copy this`,
+          });
+          field.value = text;
+          button.after(field);
+          field.focus();
+          field.select();
+        }
       },
     },
     label
   );
+  return button;
+}
+
+// The absolute address of a chart: its source's page, with the spec, and any
+// annotations, in the #chart= fragment. `page` is that page's address, with
+// or without a fragment.
+export function chartLink(page, spec) {
+  const url = new URL(page, location.href);
+  url.hash = "chart=" + encodeURIComponent(JSON.stringify(spec));
+  return url.href;
 }
 
 function delimited(result, separator) {

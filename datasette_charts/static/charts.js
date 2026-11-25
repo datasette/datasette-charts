@@ -7,7 +7,7 @@
 
 import { annotationSection } from "./annotation-editor.js";
 import { parseMoment } from "./renderers/annotations.js";
-import { chartLabel, copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
+import { chartLabel, chartLink, copyButton, copyDataButtons, count, drawChart, errorMessage, getJSON, h, truncationNote } from "./draw.js";
 
 const COLLAPSED_KEY = "datasette-charts:collapsed";
 const SELECTED_PREFIX = "datasette-charts:selected:";
@@ -479,7 +479,10 @@ class ChartsPanel {
     const links = [];
     if (result.sql_url) links.push(h("a", { href: result.sql_url }, "This chart's SQL"));
     links.push(
-      copyButton("Copy link to this chart", "Link copied", () => location.href, "Copy the address from the address bar"),
+      // Built from this page and the chart's own spec, not the address bar:
+      // inside Datasette Agent's panel this page is in a frame, and the
+      // address bar shows the conversation
+      copyButton("Copy link to this chart", "Link copied", () => chartLink(location.href, this.current.spec), "Copy this link:"),
       ...copyDataButtons(result)
     );
     this.linksEl.replaceChildren(h("div", { class: "dc-link-row" }, links));

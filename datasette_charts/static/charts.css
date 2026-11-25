@@ -461,3 +461,15 @@ dialog.datasette-modal.dc-annotation-dialog {
 .dc-annotation-form .dc-field > .dc-hint {
   font-weight: 400;
 }
+/* Shown when the clipboard cannot be used, to copy by hand */
+.dc-copy-fallback {
+  flex: 1 1 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.95em;
+  color: inherit;
+  padding: 0.35em 0.5em;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 4px;
+  background-color: Canvas;
+}

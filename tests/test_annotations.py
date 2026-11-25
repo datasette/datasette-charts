@@ -323,6 +323,10 @@ async def test_annotations_round_trip_through_a_chart_link_and_embed(ds):
         html_module.unescape(re.search(r'config="([^"]*)"', html).group(1))
     )
     assert config["spec"]["annotations"] == spec["annotations"]
+    # "Open in the chart builder" and "Copy link to this chart" use this: the
+    # source's own page, with the whole spec, annotations included
+    assert config["chart_url"] == path
+    assert json.loads(unquote(config["chart_url"].partition("#chart=")[2])) == spec
     assert (await data(ds, spec)).status_code == 200
 
 
@@ -353,3 +357,19 @@ async def test_every_builder_page_loads_datasette_modal(ds, path):
     assert response.status_code == 200
     assert 'class="datasette-charts' in response.text
     assert "/-/static/modal.js" in response.text
+
+
+@pytest.mark.asyncio
+async def test_copy_link_does_not_use_the_address_bar(ds):
+    # Inside Datasette Agent's panel the chart page is in a frame, so the
+    # address bar holds the conversation. The link is built from the page
+    # and the spec, and copying works without the Clipboard API, which plain
+    # HTTP pages do not have.
+    charts = (await ds.client.get("/-/static-plugins/datasette-charts/charts.js")).text
+    assert "() => location.href" not in charts
+    assert "chartLink(location.href, this.current.spec)" in charts
+    draw = (await ds.client.get("/-/static-plugins/datasette-charts/draw.js")).text
+    assert 'document.execCommand("copy")' in draw
+    assert "window.isSecureContext" in draw
+    embed = (await ds.client.get("/-/static-plugins/datasette-charts/embed.js")).text
+    assert "Copy link to this chart" in embed

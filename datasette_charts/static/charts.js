@@ -79,6 +79,42 @@ function withoutDerivedBins(spec) {
   return copy;
 }
 
+// --- Carrying a chart through the SQL form ---------------------------------------
+// On a SQL query page, running edited SQL loads a new page. The open chart
+// goes with it, in the #chart= fragment of the form's action: a GET form
+// keeps its action's fragment, and so does Datasette's redirect from
+// /db?sql= to /db/-/query?sql=. Setting the action, rather than listening
+// for submit, also covers the editor's Shift+Enter and Cmd+Enter, which call
+// form.submit() and fire no submit event. Only this form carries the chart.
+
+function sqlForm() {
+  const form = document.querySelector("form.sql");
+  if (!form || (form.getAttribute("method") || "get").toLowerCase() !== "get") return null;
+  return form;
+}
+
+// `fragment` is "#chart=...", or null to carry nothing
+function carryThroughSqlForm(fragment) {
+  const form = sqlForm();
+  if (!form) return;
+  const action = (form.getAttribute("action") || "").split("#")[0];
+  form.setAttribute("action", fragment ? action + fragment : action);
+}
+
+// Arriving from this same page's SQL form, as opposed to following a link
+function cameFromSqlForm() {
+  try {
+    const before = new URL(document.referrer);
+    return before.origin === location.origin && before.pathname === location.pathname;
+  } catch (e) {
+    return false;
+  }
+}
+
+// A page whose chart cannot be drawn, such as one showing a SQL error, still
+// passes on the chart it was asked for, so fixing the SQL brings it back
+if (location.hash.startsWith(FRAGMENT)) carryThroughSqlForm(location.hash);
+
 // --- The panel ----------------------------------------------------------------
 
 class ChartsPanel {
@@ -281,7 +317,9 @@ class ChartsPanel {
     } else {
       this.open({ spec, title: "", reason: "" });
     }
-    if (linked) this.scrollToView();
+    // Running edited SQL keeps the editor in view, rather than jumping to
+    // the chart it brought along
+    if (linked && !cameFromSqlForm()) this.scrollToView();
   }
 
   statusText(profile) {
@@ -420,6 +458,7 @@ class ChartsPanel {
   }
 
   close() {
+    carryThroughSqlForm(null);
     this.current = null;
     this.rememberSelection(null);
     this.view.hidden = true;
@@ -434,7 +473,10 @@ class ChartsPanel {
     const chart = this.current;
     const requestId = ++this.requestId;
     // The spec lives in the URL fragment, so a chart can be linked to
-    history.replaceState(null, "", FRAGMENT + encodeURIComponent(JSON.stringify(chart.spec)));
+    const fragment = FRAGMENT + encodeURIComponent(JSON.stringify(chart.spec));
+    history.replaceState(null, "", fragment);
+    // The chart as it is now, edits included, goes with edited SQL
+    carryThroughSqlForm(fragment);
     this.rememberSelection(chart.spec);
     // While data reloads the previous chart stays, dimmed: no layout jump
     this.chartEl.classList.add("dc-loading");

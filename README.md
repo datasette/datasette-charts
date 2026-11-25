@@ -33,6 +33,8 @@ Beside the full-size chart is a builder for changing the chart type, columns, ag
 
 The chart you are looking at is kept in the page's URL fragment, so the address bar always holds a link to it.
 
+On a SQL query page, running edited SQL keeps the chart you have open, as it is in the builder, and draws it from the new query's rows. Running the SQL with the button, Shift+Enter or Cmd+Enter, or with changed parameters all keep it, and so does a SQL error: fix the SQL, run it again, and the chart comes back. If the new rows no longer fit the chart, it says why, such as `y: no such column: entries`, and can be changed or closed. With no chart open, nothing is carried.
+
 Collapsing the panel hides the suggestions but not the chart you have open. The panel stays collapsed on other pages until you open it again.
 
 When nothing is suggested for a table, the panel starts collapsed and is labelled **Charts**. Opening it still offers "Build a chart".

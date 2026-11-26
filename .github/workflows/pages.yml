@@ -1,0 +1,61 @@
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - README.md
+      - .github/workflows/pages.yml
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # A release runs against its tag, which the github-pages environment does
+  # not let deploy. So a release starts this workflow again on main, where the
+  # build fetches the new release notes for the changelog page.
+  rebuild-for-release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+    - name: Run this workflow on main
+      run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+      env:
+        GH_TOKEN: ${{ github.token }}
+
+  build:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: astral-sh/setup-uv@v10
+    - name: Build the site
+      run: uv run site/build.py
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    - uses: actions/upload-pages-artifact@v5
+      with:
+        path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - uses: actions/deploy-pages@v5
+      id: deployment

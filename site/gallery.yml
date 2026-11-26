@@ -1,0 +1,203 @@
+# The chart gallery. site/build.py reads this to build the gallery page, the
+# Datasette Lite links and the shot-scraper configuration for the screenshots.
+#
+# Each chart has a source (a table, a filtered table or a SQL query) in one of
+# the databases below, and a spec in the format documented in the README.
+
+databases:
+  # Datasette Lite loads content.db (the database behind datasette.io) by default
+  content:
+    file: content.db
+    lite: ""
+    about: the database behind datasette.io
+  # Datasette Lite names a database loaded from a CSV file "data"
+  data:
+    file: data.db
+    lite: "csv=https://raw.githubusercontent.com/wri/global-power-plant-database/master/output_database/global_power_plant_database.csv"
+    about: the Global Power Plant Database from the World Resources Institute
+
+sections:
+  - type: line
+    title: Line charts
+    text: A count or an aggregate over time, optionally split into series.
+    charts:
+      - id: line-series
+        title: Weekly downloads, split by package
+        text: >-
+          A sum per week with one line for each of the five most downloaded
+          packages. The rest are grouped as Other.
+        database: content
+        table: stats
+        spec: {"v": 1, "type": "line", "encoding": {"x": {"column": "date", "timeUnit": "week"}, "y": {"column": "downloads", "aggregate": "sum"}, "series": {"column": "package", "limit": 5, "other": true}}, "options": {}}
+
+      - id: line-count
+        title: Releases per quarter
+        text: A count of rows for each quarter of a timestamp column, with a callout on one quarter.
+        database: content
+        table: releases
+        spec: {"v": 1, "type": "line", "encoding": {"x": {"column": "published_at", "timeUnit": "quarter"}, "y": {"aggregate": "count"}}, "options": {}, "annotations": [{"type": "point", "x": "2020-Q3", "text": "153 releases in the third quarter of 2020"}]}
+
+      - id: line-query
+        title: A line chart of a SQL query
+        text: Charts work on the results of a SQL query in the same way as on a table. This one is monthly downloads of a single package.
+        database: content
+        sql: "select date, downloads from stats where package = 'datasette'"
+        spec: {"v": 1, "type": "line", "encoding": {"x": {"column": "date", "timeUnit": "month"}, "y": {"column": "downloads", "aggregate": "sum"}}, "options": {}}
+
+  - type: bar
+    title: Bar charts
+    text: A count or an aggregate for each value of a category.
+    charts:
+      - id: bar-count
+        title: Power plants by primary fuel
+        text: A count of rows for each value of a column, largest first.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "bar", "encoding": {"x": {"column": "primary_fuel", "limit": 20, "other": true}, "y": {"aggregate": "count"}}, "options": {}}
+
+      - id: bar-sum
+        title: Total capacity for the top 12 countries
+        text: A sum for each category. The limit keeps the 12 largest and leaves out the rest.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "bar", "encoding": {"x": {"column": "country_long", "limit": 12, "other": false}, "y": {"column": "capacity_mw", "aggregate": "sum"}}, "options": {}}
+
+      - id: bar-vertical-annotated
+        title: Upright bars with annotations
+        text: >-
+          Capacity by the decade each plant was commissioned, from a SQL query
+          that works out the decade. It has a shaded range, a reference line and a text note.
+        database: data
+        sql: "select cast(commissioning_year as integer) / 10 * 10 as decade, capacity_mw from global_power_plant_database where commissioning_year >= 1950"
+        spec: {"v": 1, "type": "bar", "encoding": {"x": {"column": "decade", "sort": "key", "limit": 50, "other": false}, "y": {"column": "capacity_mw", "aggregate": "sum"}}, "options": {"orientation": "vertical"}, "annotations": [{"type": "range", "x": 1950, "x2": 1990, "text": "Commissioned before 2000"}, {"type": "line", "y": 1000000, "text": "1,000,000 MW"}, {"type": "text", "left": 0.02, "top": 0.04, "text": "Plants with a known commissioning year"}]}
+
+  - type: histogram
+    title: Histograms
+    text: The distribution of a numeric column, on a log scale when it has a long tail.
+    charts:
+      - id: histogram-log
+        title: Power plant capacity, on a log scale
+        text: Most plants are small and a few are very large, so the bins are on a log scale.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "histogram", "encoding": {"x": {"column": "capacity_mw"}}, "options": {"scale": "log"}}
+
+      - id: histogram-linear
+        title: Latitude of power plants
+        text: Linear bins for a column without a long tail.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "histogram", "encoding": {"x": {"column": "latitude", "bin": {"maxbins": 40}}}, "options": {"scale": "linear"}}
+
+  - type: scatter
+    title: Scatter plots
+    text: "Two numeric columns: points for small sources, a binned heatmap for large ones."
+    charts:
+      - id: scatter-points
+        title: Generation against capacity for nuclear plants
+        text: A filtered table. A source of up to 2,000 rows is drawn as one point per row.
+        database: data
+        table: global_power_plant_database
+        filters: [["primary_fuel", "Nuclear"]]
+        spec: {"v": 1, "type": "scatter", "encoding": {"x": {"column": "capacity_mw"}, "y": {"column": "generation_gwh_2017"}}, "options": {}}
+
+      - id: scatter-binned
+        title: Generation against capacity, counted in bins
+        text: A larger source is counted into bins by the database and drawn as a heatmap.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "scatter", "encoding": {"x": {"column": "capacity_mw"}, "y": {"column": "generation_gwh_2017"}}, "options": {}}
+
+  - type: map
+    title: Maps
+    text: "Latitude and longitude: points for small sources, grid cells for large ones."
+    charts:
+      - id: map-grid
+        title: Every power plant, counted in grid cells
+        text: A large source is counted into grid cells, so the chart query returns a few thousand rows.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "map", "encoding": {"latitude": {"column": "latitude"}, "longitude": {"column": "longitude"}}, "options": {}}
+
+      - id: map-points
+        title: Nuclear power plants, sized by capacity
+        text: A filtered table. With under 200 rows each plant is a point, sized by a numeric column.
+        database: data
+        table: global_power_plant_database
+        filters: [["primary_fuel", "Nuclear"]]
+        spec: {"v": 1, "type": "map", "encoding": {"latitude": {"column": "latitude"}, "longitude": {"column": "longitude"}, "size": {"column": "capacity_mw"}}, "options": {}}
+
+  - type: stacked_bar
+    title: Stacked and grouped bars
+    text: Two categories, or a category over time.
+    charts:
+      - id: stacked-two-categories
+        title: Capacity by country and fuel
+        text: The ten countries with the most capacity, stacked by the six most common fuels.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "country_long", "limit": 10, "other": false}, "series": {"column": "primary_fuel", "limit": 6, "other": true}, "y": {"column": "capacity_mw", "aggregate": "sum"}}, "options": {"layout": "stacked"}}
+
+      - id: grouped
+        title: Fuel by where the location came from, side by side
+        text: The grouped layout draws a bar for each value in place of a stack.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "primary_fuel", "limit": 5, "other": false}, "series": {"column": "geolocation_source", "limit": 3, "other": true}, "y": {"aggregate": "count"}}, "options": {"layout": "grouped"}}
+
+      - id: stacked-over-time
+        title: PyPI uploads per year by package type
+        text: A category over time. The x axis is a timestamp column, counted by year.
+        database: content
+        table: pypi_releases
+        spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "upload_time", "timeUnit": "year"}, "series": {"column": "packagetype", "limit": 6, "other": true}, "y": {"aggregate": "count"}}, "options": {"layout": "stacked"}}
+
+  - id: annotations
+    title: Annotations
+    text: >-
+      Notes drawn on a chart: lines, shaded ranges, callouts and text. They are
+      part of the chart's spec, so they are kept in the link to the chart.
+    docs: annotations
+    charts:
+      - id: annotation-line-x
+        title: A line at an x value
+        text: A dashed line across the chart at a date, here the day of a release.
+        database: content
+        table: releases
+        spec: {"v": 1, "type": "line", "encoding": {"x": {"column": "published_at", "timeUnit": "quarter"}, "y": {"aggregate": "count"}}, "options": {}, "annotations": [{"type": "line", "x": "2022-11-29", "text": "Datasette 1.0a0"}]}
+
+      - id: annotation-line-y
+        title: A line at a y value
+        text: A reference line at a value, drawn solid and in red.
+        database: content
+        table: pypi_releases
+        spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "upload_time", "timeUnit": "year"}, "series": {"column": "packagetype", "limit": 6, "other": true}, "y": {"aggregate": "count"}}, "options": {"layout": "stacked"}, "annotations": [{"type": "line", "y": 500, "text": "500 uploads a year", "stroke": "solid", "color": "red"}]}
+
+      - id: annotation-range
+        title: A shaded range
+        text: A band between two x values, on a histogram.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "histogram", "encoding": {"x": {"column": "latitude", "bin": {"maxbins": 40}}}, "options": {"scale": "linear"}, "annotations": [{"type": "range", "x": -23.44, "x2": 23.44, "text": "The tropics"}]}
+
+      - id: annotation-point
+        title: A callout on a point
+        text: A dot on one data point with a line to its label. On a scatter plot the callout gives both x and y.
+        database: data
+        table: global_power_plant_database
+        filters: [["primary_fuel", "Nuclear"]]
+        spec: {"v": 1, "type": "scatter", "encoding": {"x": {"column": "capacity_mw"}, "y": {"column": "generation_gwh_2017"}}, "options": {}, "annotations": [{"type": "point", "x": 5460, "y": 31471.106, "text": "Gravelines, France"}]}
+
+      - id: annotation-text
+        title: A text note
+        text: A note placed by fractions of the plot area. This is the one type a map takes, since it has no x or y axis.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "map", "encoding": {"latitude": {"column": "latitude"}, "longitude": {"column": "longitude"}}, "options": {}, "annotations": [{"type": "text", "left": 0.02, "top": 0.95, "text": "Source: Global Power Plant Database, World Resources Institute"}]}
+
+      - id: annotation-several
+        title: Several annotations, with colors and line styles
+        text: A range, a dotted line and a callout on one chart, each in its own color. Their labels are laid out together so that none covers the data or another label.
+        database: content
+        table: releases
+        spec: {"v": 1, "type": "line", "encoding": {"x": {"column": "published_at", "timeUnit": "quarter"}, "y": {"aggregate": "count"}}, "options": {}, "annotations": [{"type": "range", "x": "2020-Q1", "x2": "2020-Q4", "text": "427 releases in 2020", "color": "orange"}, {"type": "line", "y": 100, "text": "100 a quarter", "stroke": "dotted", "color": "gray"}, {"type": "point", "x": "2023-Q1", "text": "137 releases", "color": "purple"}]}

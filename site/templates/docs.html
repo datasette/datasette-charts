@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Documentation - Datasette Charts{% endblock %}
+{% block body_class %}with-sidebar{% endblock %}
+
+{% block content %}
+<nav class="toc" aria-label="On this page">
+  <ul>
+    {% for item in docs.toc %}
+    <li><a href="#{{ item.id }}">{{ item.name }}</a>
+      {% if item.children %}
+      <ul>
+        {% for child in item.children %}
+        <li><a href="#{{ child.id }}">{{ child.name }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</nav>
+<article class="prose">
+  <h1>Documentation</h1>
+  {{ docs.html|safe }}
+</article>
+{% endblock %}

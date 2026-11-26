@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Datasette Charts: charts for any Datasette table, view or SQL query{% endblock %}
+{% block body_class %}home{% endblock %}
+
+{% block hero %}
+<div class="hero">
+  <div class="hero-inner">
+    <h1>Datasette Charts</h1>
+    <p>A <a href="https://datasette.io/">Datasette</a> plugin that suggests charts for any table, view or SQL query, and lets you build your own</p>
+    <p class="actions">
+      <a class="button primary" href="{{ lite }}">Try it in Datasette Lite</a>
+      <a class="button" href="gallery/">Chart gallery</a>
+      <a class="button" href="docs/">Documentation</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<figure class="screenshot">
+  <a href="{{ panel_demo }}"><img src="screenshots/panel.webp"{% if panel_size %} width="{{ panel_size.width }}" height="{{ panel_size.height }}"{% endif %}
+    alt="Screenshot of the Suggested charts panel on a Datasette table page. A row of five suggested charts, each with a thumbnail, a title and the reason it was suggested. The fourth is selected and shown at full size below: a line chart of total downloads per week with one line for each of five packages and one for Other. Beside it is the chart builder, with menus for chart type, time column, time unit, value, aggregate and split by, and a button to add an annotation."></a>
+  <figcaption>
+    <span><strong>Screenshot:</strong> the panel on a table page, with one of its suggestions opened in the chart builder</span>
+    <a class="demo-link" href="{{ panel_demo }}">Try this demo yourself</a>
+  </figcaption>
+</figure>
+
+<section>
+  <h2>Installation</h2>
+  <p>Install the plugin in the same environment as Datasette:</p>
+  <pre><code>datasette install datasette-charts</code></pre>
+  <p>Every table, view and SQL query page then gets a <strong>Suggested charts</strong> panel. The <a href="docs/">documentation</a> covers configuration, annotations, the HTTP API and the tools for <a href="https://agent.datasette.io/">Datasette Agent</a>.</p>
+  {% if releases %}
+  <p>The latest release is <a href="changelog/#{{ releases[0].tag_name }}">{{ releases[0].tag_name }}</a>, from {{ releases[0].date }}.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Chart types</h2>
+  <ul class="cards types">
+    {% for section in gallery.sections if section.type is defined %}
+    {% set chart = section.charts[0] %}
+    <li class="card">
+      <a href="gallery/#{{ section.type }}">
+        <span class="shot"><img src="{{ chart.image }}" loading="lazy"{% if chart.size %} width="{{ chart.size.width }}" height="{{ chart.size.height }}"{% endif %} alt=""></span>
+        <h3>{{ type_labels[section.type] }}</h3>
+      </a>
+      <p>{{ section.text }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p>The <a href="gallery/">gallery</a> has more examples of each, with a live demo of every chart.</p>
+</section>
+{% endblock %}

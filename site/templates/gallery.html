@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Chart gallery - Datasette Charts{% endblock %}
+{% block description %}Examples of every chart type in Datasette Charts, each with a live demo in Datasette Lite.{% endblock %}
+
+{% block content %}
+<h1>Chart gallery</h1>
+<p>These are screenshots. Each one links to a live demo of that chart in <a href="https://lite.datasette.io/">Datasette Lite</a>, which runs Datasette in your browser. It takes a few seconds to load. The chart opens in the chart builder, where it can be changed.</p>
+<p>The demos use two databases:
+  {% for name, database in gallery.databases.items() %}<code>{{ name }}</code>, {{ database.about }}{{ " and " if not loop.last else "." }}{% endfor %}
+  The screenshots were taken from a copy of the same data, so a live demo can show newer numbers.</p>
+
+<nav class="jump" aria-label="Chart types">
+  {% for section in gallery.sections %}
+  <a href="#{{ section.id }}">{{ section.title }}</a>
+  {% endfor %}
+</nav>
+
+{% for section in gallery.sections %}
+<section id="{{ section.id }}">
+  <h2>{{ section.title }}</h2>
+  <p>{{ section.text }}{% if section.docs is defined %} <a href="../docs/#{{ section.docs }}">Documentation for {{ section.title|lower }}</a>.{% endif %}</p>
+  <ul class="cards charts">
+    {% for chart in section.charts %}
+    <li class="card" id="{{ chart.id }}">
+      <figure class="shot">
+        <a href="{{ chart.lite_url }}"><img src="../{{ chart.image }}" loading="lazy"{% if chart.size %} width="{{ chart.size.width }}" height="{{ chart.size.height }}"{% endif %} alt="Screenshot of the chart: {{ chart.title }}"></a>
+        <figcaption>Screenshot</figcaption>
+      </figure>
+      <h3>{{ chart.title }}</h3>
+      <p>{{ chart.text }}</p>
+      <p><a href="{{ chart.lite_url }}">Try this demo yourself</a></p>
+      <details>
+        <summary>Chart spec</summary>
+        <p class="source">{{ chart.source }}:
+          {% if chart.sql is defined %}<code>{{ chart.sql }}</code>
+          {% else %}<code>{{ chart.table }}</code>{% for column, value in chart.filters|default([]) %} where <code>{{ column }}</code> is <code>{{ value }}</code>{% endfor %}
+          {% endif %}
+          in the <code>{{ chart.database }}</code> database</p>
+        <pre><code>{{ chart.spec_json }}</code></pre>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endblock %}

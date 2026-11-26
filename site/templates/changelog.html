@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Changelog - Datasette Charts{% endblock %}
+{% block description %}Release notes for every version of Datasette Charts.{% endblock %}
+
+{% block content %}
+<article class="prose">
+  <h1>Changelog</h1>
+  {% if releases %}
+  {% for release in releases %}
+  <section class="release" id="{{ release.tag_name }}">
+    <h2><a href="#{{ release.tag_name }}">{{ release.tag_name }}</a></h2>
+    <p class="release-date"><time datetime="{{ release.date_iso }}">{{ release.date }}</time> · <a href="{{ release.html_url }}">Release on GitHub</a></p>
+    {{ release.html|safe }}
+  </section>
+  {% endfor %}
+  {% else %}
+  <p>The release notes are on <a href="{{ github }}/releases">GitHub Releases</a>.</p>
+  {% endif %}
+</article>
+{% endblock %}

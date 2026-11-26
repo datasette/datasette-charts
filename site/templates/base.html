@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %}</title>
+<meta name="description" content="{% block description %}{{ docs.summary }}{% endblock %}">
+<link rel="stylesheet" href="{{ root }}static/site.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<header class="hd">
+  <nav aria-label="Site">
+    <a class="site-name" href="{{ root or "./" }}">Datasette Charts</a>
+    <a href="{{ root }}gallery/"{% if page == "gallery.html" %} aria-current="page"{% endif %}>Gallery</a>
+    <a href="{{ root }}docs/"{% if page == "docs.html" %} aria-current="page"{% endif %}>Documentation</a>
+    <a href="{{ root }}changelog/"{% if page == "changelog.html" %} aria-current="page"{% endif %}>Changelog</a>
+    <a href="{{ github }}">GitHub</a>
+  </nav>
+</header>
+{% block hero %}{% endblock %}
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer class="ft">
+  <p>A plugin for <a href="https://datasette.io/">Datasette</a>
+    · <a href="{{ github }}">Source code</a>
+    · <a href="https://pypi.org/project/datasette-charts/">PyPI</a>
+    · <a href="{{ github }}/blob/main/LICENSE">Apache 2.0 license</a></p>
+</footer>
+</body>
+</html>

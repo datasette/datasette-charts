@@ -4,10 +4,9 @@
 
 {% block content %}
 <h1>Chart gallery</h1>
-<p>These are screenshots. Each one links to a live demo of that chart in <a href="https://lite.datasette.io/">Datasette Lite</a>, which runs Datasette in your browser. It takes a few seconds to load. The chart opens in the chart builder, where it can be changed.</p>
+<p>Each screenshot links to a live demo of that chart in <a href="https://lite.datasette.io/">Datasette Lite</a>, which runs Datasette in your browser.</p>
 <p>The demos use two databases:
-  {% for name, database in gallery.databases.items() %}<code>{{ name }}</code>, {{ database.about }}{{ " and " if not loop.last else "." }}{% endfor %}
-  The screenshots were taken from a copy of the same data, so a live demo can show newer numbers.</p>
+  {% for name, database in gallery.databases.items() %}<code>{{ name }}</code>, {{ database.about|safe }}{{ " and " if not loop.last else "." }}{% endfor %}</p>
 
 <nav class="jump" aria-label="Chart types">
   {% for section in gallery.sections %}

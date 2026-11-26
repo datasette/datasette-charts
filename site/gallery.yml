@@ -9,12 +9,13 @@ databases:
   content:
     file: content.db
     lite: ""
-    about: the database behind datasette.io
+    # HTML
+    about: the database behind <a href="https://datasette.io/">datasette.io</a>
   # Datasette Lite names a database loaded from a CSV file "data"
   data:
     file: data.db
     lite: "csv=https://raw.githubusercontent.com/wri/global-power-plant-database/master/output_database/global_power_plant_database.csv"
-    about: the Global Power Plant Database from the World Resources Institute
+    about: the Global Power Plant Database from <a href="https://www.wri.org/">the World Resources Institute</a>
 
 sections:
   - type: line

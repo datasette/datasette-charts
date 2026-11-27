@@ -587,6 +587,7 @@ export function render(el, { spec, rows, columns, size, width, height, Plot }) {
 - `rows` are the already-aggregated rows from `compile`. The renderer does no data fetching.
 - `size` is `"thumbnail"` or `"full"`. Thumbnails omit axes, labels and legends, so one renderer serves both.
 - `Plot` is the Observable Plot module shipped with the base plugin, passed in so built-in and third-party renderers can share it. A third-party renderer is free to ignore it and load any other library.
+- `helpers` holds the modules the built-in renderers draw with: `helpers.common` (`basePlot`, `mount`, `fmt`, `themeFor` and the other shared helpers) and `helpers.annotations` (`annotate`, which lays out annotation labels). They are the same module instances the built-in renderers import, so a third-party renderer that uses them looks like the built-in charts and can draw annotations, without knowing where the files are.
 - For built-in charts, Plot only draws. Binning, grouping and top-N all happen in SQL so that results stay bounded, which means Plot's own bin and group transforms are not used.
 
 ### 8.3 Registration

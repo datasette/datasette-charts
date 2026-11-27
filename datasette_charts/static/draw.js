@@ -4,10 +4,40 @@
 import * as common from "./renderers/common.js";
 import * as annotations from "./renderers/annotations.js";
 
-// The modules the built-in renderers draw with, handed to every renderer as
-// `ctx.helpers`. A chart type from another plugin gets the same theme,
-// formatting and annotation layout without knowing where these files are.
-const HELPERS = Object.freeze({ common, annotations });
+// The helpers every renderer is handed as `ctx.helpers`: the public part of
+// what the built-in renderers draw with, so that a chart type from another
+// plugin can look like them and draw annotations. These are the very
+// functions the built-in renderers use. Only the names listed here are part
+// of the interface: the rest of common.js and annotations.js can change.
+// Add to this list freely; renaming or removing a name breaks other plugins.
+export const HELPERS = Object.freeze({
+  // Setting up and mounting a plot
+  TIP: Object.freeze({ ...common.TIP }),
+  basePlot: common.basePlot,
+  mount: common.mount,
+  isThumbnail: common.isThumbnail,
+  xLabel: common.xLabel,
+  valueAxisMargin: common.valueAxisMargin,
+  // Numbers, names and crowded category labels
+  fmt: common.fmt,
+  fmtCompact: common.fmtCompact,
+  truncate: common.truncate,
+  categoryName: common.categoryName,
+  uniqueNames: common.uniqueNames,
+  seriesColor: common.seriesColor,
+  textWidth: common.textWidth,
+  fitBandLabels: common.fitBandLabels,
+  orderedValues: common.orderedValues,
+  // Time buckets, as the server labels them
+  bucketToDate: common.bucketToDate,
+  stepDate: common.stepDate,
+  fmtBucket: common.fmtBucket,
+  allBuckets: common.allBuckets,
+  // Annotations
+  annotate: annotations.annotate,
+  bandMatcher: annotations.bandMatcher,
+  parseMoment: annotations.parseMoment,
+});
 
 export const THUMBNAIL = { width: 208, height: 112 };
 export const FULL_HEIGHT = 340;

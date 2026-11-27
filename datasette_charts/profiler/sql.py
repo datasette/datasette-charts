@@ -3,9 +3,9 @@ SQL generation for the profiler (spec sections 7.4 and 7.5).
 
 Every query has the shape::
 
-    with source as (...), chart_profiled as (...) select ... from chart_profiled
+    with source as (...), _chart_profiled as (...) select ... from _chart_profiled
 
-``chart_profiled`` is the whole source, or a sample of it.
+``_chart_profiled`` is the whole source, or a sample of it.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ def _hint(materialized: bool) -> str:
 
 
 def full_cte(materialized: bool) -> str:
-    return f"chart_profiled as {_hint(materialized)}(select * from source)"
+    return f"_chart_profiled as {_hint(materialized)}(select * from source)"
 
 
 def first_n_cte() -> str:
     "Cheap, but biased toward whatever order the source produces"
-    return f"chart_profiled as {_hint(True)}(select * from source limit :sample_n)"
+    return f"_chart_profiled as {_hint(True)}(select * from source limit :sample_n)"
 
 
 def rowid_probe_cte(table: str) -> str:
@@ -52,15 +52,15 @@ def rowid_probe_cte(table: str) -> str:
     """
     t = table_ref(table)
     return (
-        f"chart_profiled as {_hint(True)}(\n"
+        f"_chart_profiled as {_hint(True)}(\n"
         f"  select * from {t} where rowid in (\n"
-        "    with recursive chart_probes(i) as (\n"
-        "      select 0 union all select i + 1 from chart_probes where i + 1 < :sample_n\n"
+        "    with recursive _chart_probes(i) as (\n"
+        "      select 0 union all select i + 1 from _chart_probes where i + 1 < :sample_n\n"
         "    )\n"
         f"    select (select rowid from {t}\n"
         "            where rowid >= :sample_lo + cast(i * :sample_step as integer)\n"
         "            order by rowid limit 1)\n"
-        "    from chart_probes\n"
+        "    from _chart_probes\n"
         "  )\n"
         ")"
     )
@@ -74,7 +74,7 @@ def rowid_stride_cte(table: str) -> str:
     """
     t = table_ref(table)
     return (
-        f"chart_profiled as {_hint(True)}(\n"
+        f"_chart_profiled as {_hint(True)}(\n"
         f"  select * from {t} where rowid in (\n"
         "    select rowid from (\n"
         f"      select rowid, row_number() over (order by rowid) as rn from {t}\n"
@@ -155,7 +155,7 @@ def one_scan_sql(source: Source, profiled_cte: str, columns: list) -> str:
     expressions = ["count(*) as n_rows"]
     for index, name, affinity, coordinate in columns:
         expressions.extend(one_scan_expressions(index, name, affinity, coordinate))
-    return "{}\nselect\n  {}\nfrom chart_profiled".format(
+    return "{}\nselect\n  {}\nfrom _chart_profiled".format(
         with_profiled(source, profiled_cte), ",\n  ".join(expressions)
     )
 
@@ -165,7 +165,7 @@ def distinct_select(index: int, column: str) -> str:
     q = quote(column)
     return (
         f"select {index} as col, (select count(*) from ("
-        f"select distinct {q} from chart_profiled where {q} is not null"
+        f"select distinct {q} from _chart_profiled where {q} is not null"
         " limit :distinct_cap + 1)) as n"
     )
 
@@ -174,7 +174,7 @@ def top_values_select(index: int, column: str) -> str:
     q = quote(column)
     return (
         f"select {index} as col, value, n from ("
-        f"select {q} as value, count(*) as n from chart_profiled"
+        f"select {q} as value, count(*) as n from _chart_profiled"
         f" where {q} is not null group by 1 order by n desc, 1 limit :top_values)"
     )
 
@@ -188,7 +188,7 @@ def quantiles_select(index: int, column: str) -> str:
     return (
         f"select {index} as col, {picks} from ("
         f"select {q} as x, row_number() over (order by {q}) as rn,"
-        f" count(*) over () as n from chart_profiled"
+        f" count(*) over () as n from _chart_profiled"
         f" where typeof({q}) in ('integer', 'real'))"
     )
 
@@ -202,7 +202,7 @@ def text_temporal_range_select(index: int, column: str) -> str:
         f" datetime(max(julianday({q}))) as latest,"
         f" sum({q} glob '*[0-9]Z' or {q} glob '*[+-][0-9][0-9]:[0-9][0-9]')"
         " as n_with_offset"
-        f" from chart_profiled where typeof({q}) = 'text'"
+        f" from _chart_profiled where typeof({q}) = 'text'"
         f" and {q} glob '{ISO_DATE_GLOB}*' and julianday({q}) is not null"
     )
 
@@ -212,6 +212,6 @@ def numeric_temporal_range_select(index: int, column: str, window: tuple) -> str
     return (
         f"select {index} as col, min({q}) as earliest, max({q}) as latest,"
         " 0 as n_with_offset"
-        f" from chart_profiled where typeof({q}) in ('integer', 'real')"
+        f" from _chart_profiled where typeof({q}) in ('integer', 'real')"
         f" and {q} between {window[0]} and {window[1]}"
     )

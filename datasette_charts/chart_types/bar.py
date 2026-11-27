@@ -166,23 +166,23 @@ class Bar(BuiltinChartType):
         rank = "value" if additive else "n"
         ctes = (
             f"{source.with_clause()},\n"
-            f"chart_base as (select {key} as k, {measure_sql(y)} as v from source),\n"
-            f"chart_grouped as (\n  select k as key, {aggregate_over(y)} as value,"
-            " count(*) as n\n  from chart_base group by 1\n),\n"
-            "chart_ranked as (\n  select key, value,"
+            f"_chart_base as (select {key} as k, {measure_sql(y)} as v from source),\n"
+            f"_chart_grouped as (\n  select k as key, {aggregate_over(y)} as value,"
+            " count(*) as n\n  from _chart_base group by 1\n),\n"
+            "_chart_ranked as (\n  select key, value,"
             f" row_number() over (order by {rank} desc, key) as rn\n"
-            "  from chart_grouped where value is not null\n)"
+            "  from _chart_grouped where value is not null\n)"
         )
         if other:
             # is_other is separate so a real NULL category stays distinguishable
             inner = (
                 "select case when rn <= :chart_limit then key end as key,\n"
                 "  max(rn > :chart_limit) as is_other, sum(value) as value\n"
-                "from chart_ranked group by min(rn, :chart_limit + 1)"
+                "from _chart_ranked group by min(rn, :chart_limit + 1)"
             )
         else:
             inner = (
-                "select key, 0 as is_other, value from chart_ranked"
+                "select key, 0 as is_other, value from _chart_ranked"
                 " where rn <= :chart_limit"
             )
         label = label_sql(profile, x["column"], "t.key")

@@ -1,7 +1,13 @@
 // datasette-charts: what the Charts panel and <datasette-chart> share.
 // Fetching a chart's rows, drawing them, and copying the rows behind it.
 
-import { themeFor } from "./renderers/common.js";
+import * as common from "./renderers/common.js";
+import * as annotations from "./renderers/annotations.js";
+
+// The modules the built-in renderers draw with, handed to every renderer as
+// `ctx.helpers`. A chart type from another plugin gets the same theme,
+// formatting and annotation layout without knowing where these files are.
+const HELPERS = Object.freeze({ common, annotations });
 
 export const THUMBNAIL = { width: 208, height: 112 };
 export const FULL_HEIGHT = 340;
@@ -114,8 +120,9 @@ export async function renderChart(el, { urls, types, spec, result, size = "full"
       height: thumbnail ? THUMBNAIL.height : FULL_HEIGHT,
       Plot,
       d3,
-      theme: themeFor(box),
+      theme: common.themeFor(box),
       urls,
+      helpers: HELPERS,
       loadScript,
       // Renderers add to these
       annotationNotes: ctx.annotationNotes,

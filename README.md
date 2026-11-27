@@ -246,7 +246,20 @@ def register_chart_types(datasette):
     return [SankeyChart]
 ```
 
-The built-in chart types in `datasette_charts/chart_types/` are the reference for now. This interface is not stable yet.
+The JavaScript module exports a `render(el, ctx)` function. Among other things, `ctx` holds the chart's `spec` and rows, Observable Plot as `ctx.Plot`, and the modules the built-in renderers draw with as `ctx.helpers`:
+
+```javascript
+export function render(el, ctx) {
+  const { Plot, helpers } = ctx;
+  const { basePlot, mount } = helpers.common;
+  const { annotate } = helpers.annotations;
+  // ...
+}
+```
+
+`helpers.common` has the theme, number formatting and Plot defaults the built-in charts share, and `helpers.annotations` has `annotate()`, which lays out annotation labels. A renderer that uses them looks like the built-in charts.
+
+The built-in chart types in `datasette_charts/chart_types/` and their renderers in `datasette_charts/static/renderers/` are the reference for now. This interface is not stable yet.
 
 ## Potential future improvements
 

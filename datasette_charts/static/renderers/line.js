@@ -17,6 +17,36 @@ import { annotate, parseMoment } from "./annotations.js";
 // Aggregates where a time bucket with no rows really is zero
 const ZERO_WHEN_EMPTY = new Set(["count", "sum", "count_distinct"]);
 
+// The area between the line and zero, as boxes the annotation layout keeps
+// its labels out of. The line runs straight between points, so each gap is
+// cut into slices (one per 6px, up to 4), each as tall as its higher end:
+// the boxes cover the area and follow its slope closely.
+export function areaRects(points, sx, sy) {
+  const zero = sy.apply(0);
+  const rects = [];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (a.value === null || b.value === null) continue;
+    const x0 = sx.apply(a.date);
+    const x1 = sx.apply(b.date);
+    const y0 = sy.apply(a.value);
+    const y1 = sy.apply(b.value);
+    const slices = Math.max(1, Math.min(4, Math.ceil(Math.abs(x1 - x0) / 6)));
+    for (let k = 0; k < slices; k++) {
+      const left = x0 + ((x1 - x0) * k) / slices;
+      const right = x0 + ((x1 - x0) * (k + 1)) / slices;
+      const yl = y0 + ((y1 - y0) * k) / slices;
+      const yr = y0 + ((y1 - y0) * (k + 1)) / slices;
+      // Screen y grows downwards; negative values hang below zero
+      const top = Math.min(yl, yr, zero);
+      const bottom = Math.max(yl, yr, zero);
+      rects.push({ left: Math.min(left, right), right: Math.max(left, right), top, bottom });
+    }
+  }
+  return rects;
+}
+
 // rows: bucket, value - or bucket, series, is_other, value (and series_label
 // when the series is a foreign key). meta.timeUnit says how to read buckets.
 export function render(el, ctx) {
@@ -133,10 +163,12 @@ export function render(el, ctx) {
 
   options.marks = marks;
   const plot = annotate(el, ctx, (margins) => Plot.plot(basePlot(ctx, { ...options, ...margins })), {
-    // Each series as drawn, broken where values are missing
+    // Each series as drawn, broken where values are missing, and the shaded
+    // area under a single series
     marks: (drawn) => {
       const sx = drawn.scale("x");
       const sy = drawn.scale("y");
+      const rects = !hasSeries && fillZero ? areaRects(points, sx, sy) : [];
       const lines = [];
       for (const group of series) {
         let run = [];
@@ -151,7 +183,7 @@ export function render(el, ctx) {
         }
         if (run.length) lines.push(run);
       }
-      return { rects: [], lines };
+      return { rects, lines };
     },
     x: { screen: "x", kind: "time" },
     y: { screen: "y", kind: "number" },

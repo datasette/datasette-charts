@@ -12,7 +12,7 @@ This writes the site to `_site/`. To look at it:
 python -m http.server 3473 --directory _site
 ```
 
-- The documentation page is the repository's `README.md`. `docs/javascript-helpers.md` is a page under it, `/docs/javascript-helpers/`, with its own template, `templates/helpers.html`. Its images, in `docs/images/`, are copied to `/docs/images/`. Links in these files are written to work on GitHub, and the build rewrites them for the site: `docs/javascript-helpers.md` becomes that page, the README becomes the documentation page, and links to other files in the repository go to GitHub.
+- The documentation page is the repository's `README.md`. `docs/plugins.md` is a page under it, `/docs/plugins/`, with its own template, `templates/plugins.html`. Its images, in `docs/images/`, are copied to `/docs/images/`. Links in these files are written to work on GitHub, and the build rewrites them for the site: `docs/plugins.md` becomes that page, the README becomes the documentation page, and links to other files in the repository go to GitHub.
 - The changelog is fetched from [GitHub Releases](https://github.com/datasette/datasette-charts/releases) on every build, which fails if GitHub cannot be reached. `--offline` skips the fetch and leaves the changelog page as a link to GitHub. Set `GITHUB_TOKEN` to avoid GitHub's rate limit for anonymous requests.
 - The gallery is built from `gallery.yml`. Each chart there has a source and a chart spec, which become its link to Datasette Lite and its screenshot.
 

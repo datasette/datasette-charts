@@ -8,8 +8,8 @@ Build the Datasette Charts website into _site/.
     uv run site/build.py            # build the site
     uv run site/build.py shots      # write site/shots.yml for shot-scraper multi
 
-The documentation page is the README, and docs/javascript-helpers.md is a
-page under it. The gallery comes from site/gallery.yml and the changelog is
+The documentation page is the README, and docs/plugins.md is a page under
+it. The gallery comes from site/gallery.yml and the changelog is
 fetched from GitHub Releases each time the site is built.
 """
 
@@ -355,7 +355,7 @@ def build(offline=False):
     if missing:
         print("Missing screenshots (see site/README.md): " + ", ".join(missing), file=sys.stderr)
     docs = docs_from_readme()
-    helpers = docs_page("javascript-helpers")
+    plugins = docs_page("plugins")
     releases = None if offline else fetch_releases()
 
     env = jinja2.Environment(
@@ -371,7 +371,7 @@ def build(offline=False):
         "gallery": gallery,
         "type_labels": TYPE_LABELS,
         "docs": docs,
-        "helpers": helpers,
+        "plugins": plugins,
         "releases": releases,
         "panel_size": webp_size(SITE / "screenshots" / "panel.webp"),
         # The chart open in the home page's screenshot is the gallery's first
@@ -391,7 +391,7 @@ def build(offline=False):
         "index.html": "index.html",
         "gallery/index.html": "gallery.html",
         "docs/index.html": "docs.html",
-        "docs/javascript-helpers/index.html": "helpers.html",
+        "docs/plugins/index.html": "plugins.html",
         "changelog/index.html": "changelog.html",
     }
     for path, template in pages.items():

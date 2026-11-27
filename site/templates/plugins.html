@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ helpers.title }} - Datasette Charts{% endblock %}
-{% block description %}{{ helpers.summary }}{% endblock %}
+{% block title %}{{ plugins.title }} - Datasette Charts{% endblock %}
+{% block description %}{{ plugins.summary }}{% endblock %}
 {% block body_class %}with-sidebar reference{% endblock %}
 
 {% block content %}
 <nav class="toc" aria-label="On this page">
   <p class="toc-up"><a href="../">Documentation</a></p>
   <ul>
-    {% for item in helpers.toc %}
+    {% for item in plugins.toc %}
     <li><a href="#{{ item.id }}">{{ item.name }}</a>
       {% if item.children %}
       <ul>
@@ -21,8 +21,8 @@
   </ul>
 </nav>
 <article class="prose">
-  <h1>{{ helpers.title }}</h1>
-  {{ helpers.html|safe }}
-  <p class="source-note">This page is <a href="{{ github }}/blob/main/docs/{{ helpers.name }}.md">docs/{{ helpers.name }}.md</a> in the repository.</p>
+  <h1>{{ plugins.title }}</h1>
+  {{ plugins.html|safe }}
+  <p class="source-note">This page is <a href="{{ github }}/blob/main/docs/{{ plugins.name }}.md">docs/{{ plugins.name }}.md</a> in the repository.</p>
 </article>
 {% endblock %}

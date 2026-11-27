@@ -131,7 +131,8 @@ class Histogram(BuiltinChartType):
         column = x["column"]
         column_profile = profile.column(column) if profile else None
         points = (
-            f"select {quote(column)} as x from source where {numeric_filter(column)}"
+            f"select {quote(column)} as x from _chart_source"
+            f" where {numeric_filter(column)}"
         )
 
         if (spec.get("options") or {}).get("scale") == "log":

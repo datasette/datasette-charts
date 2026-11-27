@@ -7,9 +7,23 @@ from dataclasses import dataclass
 SOURCE_KINDS = ("table", "query", "stored_query")
 
 
+# The CTE every profile and chart query reads its rows from. Prefixed, like
+# the CTEs chart types add, so that a table can have any other name
+SOURCE_CTE = "_chart_source"
+
+
 def quote(identifier: str) -> str:
     "Quote a SQLite identifier"
     return '"' + str(identifier).replace('"', '""') + '"'
+
+
+def table_ref(table: str) -> str:
+    """
+    A table in the database being charted, qualified with its schema so
+    that a table named like a CTE in the same query still means the
+    table. Datasette opens each database as ``main``.
+    """
+    return "main." + quote(table)
 
 
 def clean_sql(sql: str) -> str:
@@ -27,7 +41,7 @@ class Source:
     or a stored query.
 
     Every profiling and chart query has the shape
-    ``with source as (...) select ... from source``.
+    ``with _chart_source as (...) select ... from _chart_source``.
     """
 
     database: str
@@ -72,9 +86,9 @@ class Source:
 
     @property
     def body(self) -> str:
-        "The SQL that goes inside the ``source`` CTE"
+        "The SQL that goes inside the ``_chart_source`` CTE"
         if self.kind == "table":
-            body = f"select * from {quote(self.table)}"
+            body = f"select * from {table_ref(self.table)}"
             if self.where:
                 body += f" where {self.where}"
             return body
@@ -83,7 +97,7 @@ class Source:
     def with_clause(self) -> str:
         # The newlines mean a trailing "-- comment" in a query cannot
         # swallow the closing parenthesis
-        return f"with source as (\n{self.body}\n)"
+        return f"with {SOURCE_CTE} as (\n{self.body}\n)"
 
     @property
     def label(self) -> str:

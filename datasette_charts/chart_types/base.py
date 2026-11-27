@@ -103,7 +103,7 @@ class ChartType:
 
     def compile(self, spec: dict, source, profile) -> CompiledQuery:
         """
-        Return SQL and params that select from the ``source`` CTE and
+        Return SQL and params that select from the ``_chart_source`` CTE and
         return at most ``max_rows`` rows.
         """
         raise NotImplementedError

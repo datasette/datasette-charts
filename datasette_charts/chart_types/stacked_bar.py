@@ -149,9 +149,9 @@ class StackedBar(BuiltinChartType):
                 where = f" where {dimension['filter']}"
             meta["timeUnit"] = dimension["unit"]
             # Time buckets are all kept, in time order
-            x_rank = "select k, 0 as rn from base where k is not null group by 1"
+            x_rank = "select k, 0 as rn from _chart_base where k is not null group by 1"
             x_keep = 1
-            x_position = "base.k"
+            x_position = "_chart_base.k"
             x_bound = MAX_TIME_BUCKETS
             x_other = False
         else:
@@ -161,7 +161,7 @@ class StackedBar(BuiltinChartType):
             params["chart_x_limit"] = x_limit
             x_rank = (
                 f"select k, row_number() over (order by {rank_over(y)} desc, k) as rn"
-                " from base group by 1"
+                " from _chart_base group by 1"
             )
             x_keep = ":chart_x_limit"
             x_position = "min(xr.rn, :chart_x_limit + 1)"
@@ -184,25 +184,25 @@ class StackedBar(BuiltinChartType):
         max_rows = x_bound * (series_limit + 1)
         sql = (
             f"{source.with_clause()},\n"
-            f"base as {not_materialized()}(select {key} as k,"
+            f"_chart_base as {not_materialized()}(select {key} as k,"
             f" {quote(series['column'])} as s, {measure_sql(y)} as v"
-            f" from source{where}),\n"
-            f"x_rank as ({x_rank}),\n"
-            "series_rank as (\n"
+            f" from _chart_source{where}),\n"
+            f"_chart_x_rank as ({x_rank}),\n"
+            "_chart_series_rank as (\n"
             f"  select s, row_number() over (order by {rank_over(y)} desc, s) as rn\n"
-            "  from base group by 1\n"
+            "  from _chart_base group by 1\n"
             ")\n"
             f"select key, key_is_other, series, series_is_other, value{labels} from (\n"
             f"  select case when xr.rn <= {x_keep} then xr.k end as key,\n"
             f"    max(xr.rn > {x_keep}) as key_is_other,\n"
             "    case when sr.rn <= :chart_series_limit then sr.s end as series,\n"
             "    max(sr.rn > :chart_series_limit) as series_is_other,\n"
-            f"    {aggregate_over(y, 'base.v')} as value,\n"
+            f"    {aggregate_over(y, '_chart_base.v')} as value,\n"
             f"    {x_position} as x_position,\n"
             "    min(sr.rn, :chart_series_limit + 1) as series_position\n"
-            "  from base\n"
-            "  join x_rank xr on xr.k is base.k\n"
-            "  join series_rank sr on sr.s is base.s\n"
+            "  from _chart_base\n"
+            "  join _chart_x_rank xr on xr.k is _chart_base.k\n"
+            "  join _chart_series_rank sr on sr.s is _chart_base.s\n"
             f"{keep}"
             "  group by x_position, series_position\n"
             ") t where value is not null\n"

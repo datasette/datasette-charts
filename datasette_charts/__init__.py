@@ -32,9 +32,16 @@ from .chart_types import (  # noqa: E402
 )
 from .config import PLUGIN_NAME, get_config  # noqa: E402
 from .filters import filters_from_args  # noqa: E402
-from .sources import Source  # noqa: E402
+from .sources import SOURCE_CTE, Source  # noqa: E402
 
-__all__ = ["Candidate", "Channel", "ChartType", "CompiledQuery", "Source"]
+__all__ = [
+    "SOURCE_CTE",
+    "Candidate",
+    "Channel",
+    "ChartType",
+    "CompiledQuery",
+    "Source",
+]
 
 PANEL_ID = "datasette-charts"
 CHART_VIEWS = ("table", "query")

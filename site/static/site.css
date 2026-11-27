@@ -352,6 +352,16 @@ span.shot {
 .toc a:hover {
   text-decoration: underline;
 }
+.toc-up,
+.toc-more {
+  margin: 0 0 0.6rem;
+  font-weight: 700;
+}
+.toc-more {
+  margin: 1rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
 @media (max-width: 50rem) {
   .with-sidebar main {
     display: block;
@@ -365,6 +375,48 @@ span.shot {
     border: 1px solid var(--line);
     border-radius: 6px;
   }
+  /* The reference pages list every function: on a phone they run on in a
+     line under each section, instead of one to a line */
+  .reference .toc ul ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.9rem;
+    padding-left: 0;
+  }
+  .reference .toc li li {
+    margin: 0.15rem 0;
+  }
+}
+
+/* A link to each heading of a reference page, shown when it is pointed at */
+.headerlink {
+  margin-left: 0.35em;
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+}
+h2:hover > .headerlink,
+h3:hover > .headerlink,
+h4:hover > .headerlink,
+.headerlink:focus {
+  opacity: 1;
+}
+.prose h3 code,
+.prose h4 code {
+  font-size: 0.9em;
+}
+.prose img {
+  display: block;
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+}
+.source-note {
+  margin-top: 2.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .prose {

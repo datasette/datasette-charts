@@ -8,8 +8,9 @@ Build the Datasette Charts website into _site/.
     uv run site/build.py            # build the site
     uv run site/build.py shots      # write site/shots.yml for shot-scraper multi
 
-The documentation page is the README, the gallery comes from site/gallery.yml
-and the changelog is fetched from GitHub Releases each time the site is built.
+The documentation page is the README, and docs/javascript-helpers.md is a
+page under it. The gallery comes from site/gallery.yml and the changelog is
+fetched from GitHub Releases each time the site is built.
 """
 
 import argparse
@@ -31,6 +32,7 @@ import yaml
 
 SITE = pathlib.Path(__file__).parent
 ROOT = SITE.parent
+DOCS = ROOT / "docs"
 OUT = ROOT / "_site"
 REPO = "datasette/datasette-charts"
 GITHUB = f"https://github.com/{REPO}"
@@ -213,6 +215,72 @@ def shots_config(gallery):
 # Documentation
 
 
+def site_links(html, depth):
+    """
+    Links written to work on GitHub, rewritten for the site. A page `depth`
+    folders below the documentation page links to docs/name.md as name/, to
+    the README as the documentation page, and to other files in the
+    repository on GitHub.
+    """
+    up = "../" * depth
+
+    def rewrite(match):
+        attr, target = match.group(1), match.group(2)
+        if re.match(r"^[a-z]+:|^#|^images/", target):
+            return match.group(0)
+        path, _, anchor = target.partition("#")
+        anchor = f"#{anchor}" if anchor else ""
+        # From the README in the root of the repository, or from docs/
+        resolved = os.path.normpath(path if depth == 0 else os.path.join("docs", path))
+        if resolved == "README.md":
+            href = (up or "./") + anchor
+        elif resolved.startswith("docs/") and resolved.endswith(".md"):
+            href = f"{up}{resolved.removeprefix('docs/').removesuffix('.md')}/{anchor}"
+        else:
+            kind = "tree" if (ROOT / resolved).is_dir() else "blob"
+            href = f"{GITHUB}/{kind}/main/{resolved}{anchor}"
+        return f'{attr}="{href}"'
+
+    html = re.sub(r'(href)="([^"]+)"', rewrite, html)
+    # Images in docs/images/ are copied to the site's docs/images/
+    return html.replace('src="images/', f'src="{up}images/')
+
+
+def docs_page(name):
+    """
+    A page from docs/: its title, its first paragraph, its HTML and a table
+    of contents. Its own list of contents is left out, since the page has
+    one beside it.
+    """
+    text = (DOCS / f"{name}.md").read_text()
+    title, body = text.split("\n", 1)
+    body = re.sub(r"\n## Contents\n.*?(?=\n## )", "\n", body, flags=re.S)
+    summary = next(
+        part for part in body.strip().split("\n\n") if not part.startswith("#")
+    )
+    md = markdown.Markdown(
+        extensions=["fenced_code", "tables", "toc", "sane_lists"],
+        extension_configs={
+            "toc": {
+                "permalink": "#",
+                "permalink_title": "Link to this section",
+                "toc_depth": "2-3",
+            }
+        },
+    )
+    content = md.convert(body)
+    content = content.replace("<table>", '<div class="table-scroll"><table>').replace(
+        "</table>", "</table></div>"
+    )
+    return {
+        "name": name,
+        "title": title.removeprefix("# ").strip(),
+        "summary": re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", summary).replace("`", ""),
+        "html": site_links(content, 1),
+        "toc": md.toc_tokens,
+    }
+
+
 def docs_from_readme():
     "The README without its title, badges and screenshot, as HTML and a table of contents"
     text = (ROOT / "README.md").read_text()
@@ -229,7 +297,11 @@ def docs_from_readme():
     content = content.replace("<table>", '<div class="table-scroll"><table>').replace(
         "</table>", "</table></div>"
     )
-    return {"summary": " ".join(summary), "html": content, "toc": md.toc_tokens}
+    return {
+        "summary": " ".join(summary),
+        "html": site_links(content, 0),
+        "toc": md.toc_tokens,
+    }
 
 
 # Changelog
@@ -283,6 +355,7 @@ def build(offline=False):
     if missing:
         print("Missing screenshots (see site/README.md): " + ", ".join(missing), file=sys.stderr)
     docs = docs_from_readme()
+    helpers = docs_page("javascript-helpers")
     releases = None if offline else fetch_releases()
 
     env = jinja2.Environment(
@@ -298,6 +371,7 @@ def build(offline=False):
         "gallery": gallery,
         "type_labels": TYPE_LABELS,
         "docs": docs,
+        "helpers": helpers,
         "releases": releases,
         "panel_size": webp_size(SITE / "screenshots" / "panel.webp"),
         # The chart open in the home page's screenshot is the gallery's first
@@ -309,6 +383,7 @@ def build(offline=False):
     OUT.mkdir()
     shutil.copytree(SITE / "static", OUT / "static")
     shutil.copytree(SITE / "screenshots", OUT / "screenshots")
+    shutil.copytree(DOCS / "images", OUT / "docs" / "images")
     # Nothing here is Jekyll, and GitHub Pages should not treat it as such
     (OUT / ".nojekyll").write_text("")
 
@@ -316,6 +391,7 @@ def build(offline=False):
         "index.html": "index.html",
         "gallery/index.html": "gallery.html",
         "docs/index.html": "docs.html",
+        "docs/javascript-helpers/index.html": "helpers.html",
         "changelog/index.html": "changelog.html",
     }
     for path, template in pages.items():

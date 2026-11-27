@@ -4,7 +4,9 @@ built-in renderers draw with, so that a chart type from another plugin can
 look like them and draw annotations without knowing where their files are.
 
 These tests pin that interface. A helper can be added (add it to HELPERS
-here and to the README too); renaming or removing one breaks other plugins.
+here, and document it in docs/javascript-helpers.md, which
+test_javascript_helpers_docs.py checks); renaming or removing one breaks
+other plugins.
 
 Run in node: a renderer written to a temporary file stands in for one from
 another plugin, and records what it was given.
@@ -157,10 +159,3 @@ def test_helpers_cannot_be_changed_by_a_renderer(seen):
 def test_ctx_fields_and_theme_tokens(seen):
     assert set(CTX_FIELDS) <= set(seen["ctx"])
     assert sorted(seen["theme"]) == sorted(THEME_TOKENS)
-
-
-def test_readme_documents_every_helper_field_and_token():
-    readme = (ROOT / "README.md").read_text()
-    section = readme[readme.index("## Adding chart types") :]
-    for name in [*HELPERS, *CTX_FIELDS, *THEME_TOKENS]:
-        assert f"`{name}`" in section or f"`{name}(" in section, name

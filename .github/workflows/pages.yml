@@ -6,6 +6,7 @@ on:
     paths:
       - site/**
       - README.md
+      - docs/**
       - .github/workflows/pages.yml
   release:
     types: [published]

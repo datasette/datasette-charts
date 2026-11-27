@@ -4,8 +4,8 @@ built-in renderers draw with, so that a chart type from another plugin can
 look like them and draw annotations without knowing where their files are.
 
 These tests pin that interface. A helper can be added (add it to HELPERS
-here, and document it in docs/javascript-helpers.md, which
-test_javascript_helpers_docs.py checks); renaming or removing one breaks
+here, and document it in docs/plugins.md, which
+test_plugin_docs.py checks); renaming or removing one breaks
 other plugins.
 
 Run in node: a renderer written to a temporary file stands in for one from

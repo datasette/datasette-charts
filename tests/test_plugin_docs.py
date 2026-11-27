@@ -1,9 +1,15 @@
 """
-docs/javascript-helpers.md documents ctx.helpers for authors of renderers.
+docs/plugins.md is for authors of chart type plugins: a tutorial, then a
+reference for the Python classes, the profile and the JavaScript helpers.
 These tests keep it honest.
 
-Every helper, every ctx field and every theme token must be documented, each
-helper under a heading of its own.
+Every public name in datasette_charts, every ChartType attribute and method,
+and every JavaScript helper must have a heading of its own. Every ctx field
+and theme token, and every field of the dataclasses, must be documented.
+
+The tutorial's finished plugin is written out from the page and its own tests
+are run. Every line of the tutorial's steps must be in the finished plugin,
+and every line of the finished plugin in one of the steps.
 
 The examples are checked. In a ```javascript block, a line such as
 
@@ -29,17 +35,25 @@ Results from a browser, such as text widths, are written as plain comments,
 which are not checked here.
 """
 
+import ast
+import dataclasses
+import inspect
 import json
 import pathlib
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 from test_renderer_helpers import CTX_FIELDS, HELPERS, THEME_TOKENS
 
+import datasette_charts
+from datasette_charts import Candidate, Channel, ChartType, CompiledQuery
+from datasette_charts.profiler.model import ColumnProfile, Profile, TemporalInfo
+
 ROOT = pathlib.Path(__file__).parent.parent
-DOC = ROOT / "docs" / "javascript-helpers.md"
+DOC = ROOT / "docs" / "plugins.md"
 STATIC = ROOT / "datasette_charts" / "static"
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
@@ -64,10 +78,17 @@ def headings(text):
 def section(text, heading):
     "The text under a heading, up to the next heading at the same level or above"
     level = len(heading) - len(heading.lstrip("#"))
-    start = text.index(heading + "\n")
-    rest = text[start + len(heading) :]
-    end = re.search(rf"^#{{1,{level}}} ", rest, re.MULTILINE)
-    return rest[: end.start()] if end else rest
+    lines = text.splitlines()
+    start = lines.index(heading)
+    end = len(lines)
+    fenced = False
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("```"):
+            fenced = not fenced
+        elif not fenced and re.match(rf"^#{{1,{level}}} ", lines[i]):
+            end = i
+            break
+    return "\n".join(lines[start + 1 : end]) + "\n"
 
 
 def code_blocks(text, language):
@@ -89,22 +110,110 @@ def code_blocks(text, language):
 # Documented, each helper under its own heading
 
 
+JS_START = "## What a renderer is handed"
+
+
+def javascript_part():
+    text = doc_text()
+    return text[text.index(JS_START) :]
+
+
+def python_part():
+    text = doc_text()
+    return text[: text.index(JS_START)]
+
+
+def h3_named(text, name):
+    "The ### headings for a name, as `name` or `name(args)`"
+    return [
+        heading
+        for level, heading in headings(text)
+        if level == 3 and re.match(rf"^`{re.escape(name)}(\(.*\))?`$", heading)
+    ]
+
+
 @pytest.mark.parametrize("name", HELPERS)
 def test_every_helper_has_a_heading(name):
-    level3 = [text for level, text in headings(doc_text()) if level == 3]
-    matching = [
-        text for text in level3 if re.match(rf"^`{re.escape(name)}(\(.*\))?`$", text)
-    ]
-    assert len(matching) == 1, f"no ### heading for {name}"
+    assert len(h3_named(javascript_part(), name)) == 1, f"no ### heading for {name}"
 
 
 def test_no_heading_for_a_helper_that_does_not_exist():
     documented = {
         match.group(1)
-        for level, text in headings(doc_text())
+        for level, text in headings(javascript_part())
         if level == 3 and (match := re.match(r"^`(\w+)\(", text))
     }
     assert documented <= set(HELPERS)
+
+
+# The Python reference
+
+
+@pytest.mark.parametrize("name", datasette_charts.__all__)
+def test_every_public_name_has_a_heading(name):
+    # ChartType has a section of its own, the rest a ### heading
+    sections = [
+        text
+        for level, text in headings(python_part())
+        if level == 2 and f"`{name}`" in text
+    ]
+    found = len(h3_named(python_part(), name)) + len(sections)
+    assert found == 1, f"no heading for {name}"
+
+
+CHART_TYPE_MEMBERS = [name for name in vars(ChartType) if not name.startswith("_")]
+
+
+@pytest.mark.parametrize("name", CHART_TYPE_MEMBERS)
+def test_every_chart_type_attribute_and_method_has_a_heading(name):
+    found = h3_named(section(doc_text(), "## The `ChartType` class"), name)
+    assert len(found) == 1, f"no ### heading for ChartType.{name}"
+    member = vars(ChartType)[name]
+    if callable(member):
+        # The heading shows the method's real arguments
+        arguments = list(inspect.signature(member).parameters)[1:]
+        assert found[0] == "`{}({})`".format(name, ", ".join(arguments))
+    else:
+        assert found[0] == f"`{name}`"
+
+
+def table_names(text):
+    "The names in the first column of every table in some text"
+    names = set()
+    for line in text.splitlines():
+        if line.startswith("| ") and not line.startswith("|---"):
+            names.update(re.findall(r"`(\w+)`", line.split("|")[1]))
+    return names
+
+
+@pytest.mark.parametrize("cls", [Channel, Candidate, CompiledQuery])
+def test_every_dataclass_field_is_documented(cls):
+    documented = table_names(section(doc_text(), f"### `{cls.__name__}`"))
+    fields = {field.name for field in dataclasses.fields(cls)}
+    assert fields == documented
+
+
+@pytest.mark.parametrize("cls", [Profile, ColumnProfile, TemporalInfo])
+def test_documented_profile_attributes_exist(cls):
+    documented = table_names(section(doc_text(), f"### `{cls.__name__}`"))
+    assert documented
+    for name in documented:
+        assert hasattr(cls, name) or name in {
+            f.name for f in dataclasses.fields(cls)
+        }, name
+
+
+def test_documented_source_attributes_exist():
+    documented = table_names(section(doc_text(), "### `Source`"))
+    fields = {field.name for field in dataclasses.fields(datasette_charts.Source)}
+    for name in documented:
+        assert hasattr(datasette_charts.Source, name) or name in fields, name
+
+
+def test_every_role_is_documented():
+    from datasette_charts.profiler.model import ROLES
+
+    assert table_names(section(doc_text(), "### Column roles")) == set(ROLES)
 
 
 @pytest.mark.parametrize("field", CTX_FIELDS)
@@ -338,10 +447,99 @@ def test_renderers_on_the_page_are_valid_javascript(tmp_path):
         for _, lines in code_blocks(doc_text(), "javascript")
         if any("export function render" in line for line in lines)
     ]
-    assert len(renderers) >= 2
+    assert renderers
     for i, lines in enumerate(renderers):
         module = tmp_path / f"renderer{i}.mjs"
         module.write_text("\n".join(lines))
         subprocess.run(
             ["node", "--check", str(module)], check=True, capture_output=True
         )
+
+
+# The tutorial
+
+
+def tutorial():
+    "The tutorial's code blocks: the steps, the finished files and the tests"
+    text = section(doc_text(), "## Tutorial: a lollipop chart plugin")
+    steps, finished = text.split("### The finished plugin")
+    python_steps = [lines for _, lines in code_blocks(steps, "python")]
+    tests = [lines for lines in python_steps if lines[0] == "import json"]
+    assert len(tests) == 1
+    python_steps.remove(tests[0])
+    init, js = [lines for _, lines in code_blocks(finished, "python")] + [
+        lines for _, lines in code_blocks(finished, "javascript")
+    ]
+    return {
+        "python_steps": python_steps,
+        "javascript_steps": [lines for _, lines in code_blocks(steps, "javascript")],
+        "init": init,
+        "js": js,
+        "tests": tests[0],
+    }
+
+
+def test_tutorial_python_is_valid():
+    for _, lines in code_blocks(doc_text(), "python"):
+        code = "\n".join(lines)
+        if code.startswith(" "):
+            # Methods, shown with the class's indentation
+            code = "class Example:\n" + code
+        ast.parse(code)
+
+
+# The renderer at step 4, before step 7 replaces its last two lines
+REPLACED = {"  const plot = Plot.plot(options);"}
+
+
+@pytest.mark.parametrize("language", ["python", "javascript"])
+def test_tutorial_steps_add_up_to_the_finished_plugin(language):
+    blocks = tutorial()
+    finished = blocks["init" if language == "python" else "js"]
+    steps = [line for lines in blocks[f"{language}_steps"] for line in lines]
+    finished_lines = {line for line in finished if line.strip()}
+    step_lines = {line for line in steps if line.strip()}
+    # Methods are shown on their own, with the class's indentation
+    assert step_lines - REPLACED <= finished_lines, step_lines - finished_lines
+    assert finished_lines <= step_lines, finished_lines - step_lines
+
+
+@needs_node
+def test_tutorial_renderer_is_valid_javascript(tmp_path):
+    module = tmp_path / "lollipop.mjs"
+    module.write_text("\n".join(tutorial()["js"]))
+    subprocess.run(["node", "--check", str(module)], check=True, capture_output=True)
+
+
+CONFTEST = """
+from datasette.plugins import pm
+
+import datasette_lollipop
+
+pm.register(datasette_lollipop, name="datasette-lollipop")
+"""
+
+
+def test_tutorial_plugin_passes_its_own_tests(tmp_path):
+    blocks = tutorial()
+    package = tmp_path / "datasette_lollipop"
+    (package / "static").mkdir(parents=True)
+    (package / "__init__.py").write_text("\n".join(blocks["init"]) + "\n")
+    (package / "static" / "lollipop.js").write_text("\n".join(blocks["js"]) + "\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_lollipop.py").write_text(
+        "\n".join(blocks["tests"]) + "\n"
+    )
+    (tmp_path / "conftest.py").write_text(CONFTEST)
+    (tmp_path / "pytest.ini").write_text("[pytest]\nasyncio_mode = strict\n")
+    run = subprocess.run(
+        # test_plugin_is_installed needs the package to be installed
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"]
+        + ["--deselect", "tests/test_lollipop.py::test_plugin_is_installed"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "2 passed" in run.stdout

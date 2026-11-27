@@ -229,46 +229,9 @@ html = api.embed_html(datasette, source, spec)
 
 ## Adding chart types
 
-A chart type is a Python class that proposes charts and compiles them to SQL, plus a JavaScript module that draws the result. Other plugins register theirs with the `register_chart_types` hook, which is how the built-in ones are registered too:
+Other plugins can add chart types. A chart type is a Python class that proposes charts and compiles them to SQL, plus a JavaScript module that draws the result, registered with the `register_chart_types` hook. The built-in chart types are registered the same way.
 
-```python
-from datasette import hookimpl
-from datasette_charts import ChartType
-
-
-class SankeyChart(ChartType):
-    name = "sankey"
-    ...
-
-
-@hookimpl
-def register_chart_types(datasette):
-    return [SankeyChart]
-```
-
-### Renderers
-
-The JavaScript module, at the chart type's `js_url`, exports a `render(el, ctx)` function that draws the chart into `el`. `ctx` has the chart's spec and rows, its size, the page's light or dark theme, [Observable Plot](https://observablehq.com/plot/) and D3, and `ctx.helpers`: the functions the built-in renderers draw with, so a renderer that uses them looks like the built-in charts and can draw annotations. This one draws a bar for each row of a chart type whose SQL returns `key` and `value` columns:
-
-```javascript
-export function render(el, ctx) {
-  const { Plot, helpers, theme } = ctx;
-  const { basePlot, mount, annotate, bandMatcher } = helpers;
-  const keys = ctx.data.map((d) => d.key);
-  const options = basePlot(ctx, {
-    x: { domain: keys, label: null },
-    y: { label: null },
-    marks: [Plot.barY(ctx.data, { x: "key", y: "value", fill: theme.series[0] })],
-  });
-  const plot = annotate(el, ctx, (margins) => Plot.plot({ ...options, ...margins }), {
-    x: { screen: "x", kind: "band", match: bandMatcher(keys, keys) },
-    y: { screen: "y", kind: "number" },
-  });
-  mount(el, ctx, plot);
-}
-```
-
-[JavaScript helpers for chart renderers](docs/javascript-helpers.md) documents everything a renderer is handed, each helper with examples, and how to draw annotations. The built-in chart types in `datasette_charts/chart_types/` and their renderers in `datasette_charts/static/renderers/` are fuller examples. This interface is not stable yet.
+[Writing chart type plugins](docs/plugins.md) has a tutorial that builds one from start to finish, and a reference for the Python classes, the profile that suggestions are worked out from, and the JavaScript helpers every renderer is handed. This interface is not stable yet.
 
 ## Potential future improvements
 

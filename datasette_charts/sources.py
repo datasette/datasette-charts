@@ -12,6 +12,15 @@ def quote(identifier: str) -> str:
     return '"' + str(identifier).replace('"', '""') + '"'
 
 
+def table_ref(table: str) -> str:
+    """
+    A table in the database being charted, qualified with its schema so
+    that a table named like a CTE in the same query (such as ``source``)
+    still means the table. Datasette opens each database as ``main``.
+    """
+    return "main." + quote(table)
+
+
 def clean_sql(sql: str) -> str:
     "Strip the whitespace and trailing semicolons that would break a CTE body"
     sql = (sql or "").strip()
@@ -74,7 +83,7 @@ class Source:
     def body(self) -> str:
         "The SQL that goes inside the ``source`` CTE"
         if self.kind == "table":
-            body = f"select * from {quote(self.table)}"
+            body = f"select * from {table_ref(self.table)}"
             if self.where:
                 body += f" where {self.where}"
             return body

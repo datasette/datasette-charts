@@ -624,6 +624,13 @@ Every chart type must guarantee an upper bound on the rows it returns, independe
 - The data endpoint wraps the compiled SQL as `select * from (...) limit :max_rows + 1` and reports `truncated: true` if the extra row appears.
 - A global hard cap (proposed: 5,000 rows) applies on top of any chart type's own `max_rows`.
 
+### 8.5 Names in chart SQL
+
+A table can have any name, including one a chart's own SQL uses for a CTE. Two rules keep such a table working:
+
+- A real table is always written with its schema, as `main."orders"`, through `sources.table_ref()`. That covers the `source` CTE's own body, the profiler's rowid samples and foreign key label lookups. A CTE name never shadows a schema-qualified table.
+- A chart type's own CTEs are prefixed `chart_` (`chart_base`, `chart_ranked` and so on), and the profiler's are too (`chart_profiled`). Third-party chart types should do the same. The prefix also covers SQL query sources, whose SQL cannot be qualified: only a query that reads a table named `source` still clashes, since `source` is the name every chart type selects from.
+
 ## 9. The chart DSL
 
 ### 9.1 Spec

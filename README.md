@@ -246,20 +246,69 @@ def register_chart_types(datasette):
     return [SankeyChart]
 ```
 
-The JavaScript module exports a `render(el, ctx)` function. Among other things, `ctx` holds the chart's `spec` and rows, Observable Plot as `ctx.Plot`, and the modules the built-in renderers draw with as `ctx.helpers`:
+### Renderers
+
+The JavaScript module, at the chart type's `js_url`, exports a `render(el, ctx)` function that draws the chart into `el`:
 
 ```javascript
 export function render(el, ctx) {
   const { Plot, helpers } = ctx;
-  const { basePlot, mount } = helpers.common;
-  const { annotate } = helpers.annotations;
-  // ...
+  const { basePlot, mount, annotate, bandMatcher } = helpers;
+  const keys = ctx.data.map((d) => d.key);
+  const marks = [Plot.barY(ctx.data, { x: "key", y: "value" })];
+  const plot = annotate(el, ctx, (margins) => Plot.plot(basePlot(ctx, { marks, ...margins })), {
+    x: { screen: "x", kind: "band", match: bandMatcher(keys, keys) },
+    y: { screen: "y", kind: "number" },
+  });
+  mount(el, ctx, plot);
 }
 ```
 
-`helpers.common` has the theme, number formatting and Plot defaults the built-in charts share, and `helpers.annotations` has `annotate()`, which lays out annotation labels. A renderer that uses them looks like the built-in charts.
+A renderer can rely on these fields of `ctx`. Any others are internal to this plugin and can change:
 
-The built-in chart types in `datasette_charts/chart_types/` and their renderers in `datasette_charts/static/renderers/` are the reference for now. This interface is not stable yet.
+| Field | |
+|---|---|
+| `spec` | The chart's spec |
+| `rows`, `columns` | The rows the chart type's SQL returned, and their column names |
+| `data` | The same rows as objects keyed by column name |
+| `meta` | What the chart type's `compile()` returned as `meta` |
+| `size` | `"full"` or `"thumbnail"`. Thumbnails have no axes, labels or legends |
+| `width`, `height` | The size to draw at, in pixels |
+| `Plot`, `d3` | [Observable Plot](https://observablehq.com/plot/) and D3, as bundled with this plugin |
+| `theme` | The colors for the page the chart is on, light or dark (below) |
+| `helpers` | The helpers the built-in renderers draw with (below) |
+
+`ctx.helpers` has the functions the built-in renderers use, so a renderer that uses them looks like the built-in charts and can draw annotations:
+
+| Helper | |
+|---|---|
+| `basePlot(ctx, options)` | The options every plot starts from, merged with `options`: the size, font, colors, and no axes on thumbnails |
+| `mount(el, ctx, plot)` | Puts the drawn plot into `el` |
+| `isThumbnail(ctx)` | Whether this is a thumbnail |
+| `TIP` | Options to spread into a `Plot.tip()` |
+| `xLabel(label)` | Axis options for an x axis label centred under the ticks |
+| `valueAxisMargin(values, fontFamily)` | A left margin wide enough for the tick labels of an axis showing `values` |
+| `fmt(value)`, `fmtCompact(value)` | A number formatted for a tooltip (`1,284.5`), or compactly for a label beside a mark (`12.9K`) |
+| `truncate(text, max)` | `text` cut to `max` characters with an ellipsis |
+| `categoryName(key, isOther, label)` | The name to show for a category: its foreign key `label`, "Other", or the key |
+| `uniqueNames(names)` | The names made unique, for a band scale |
+| `seriesColor(theme, index)` | The color for the series at `index` |
+| `textWidth(text, font)` | The width of `text` in pixels |
+| `fitBandLabels(labels, {step, fontFamily, ordered})` | How to fit the labels of a band axis with `step` pixels per band: `{fontSize, angle, every, marginBottom, overhang}` |
+| `orderedValues(keys)` | Whether category keys are ordered numbers or dates, such as years, whose labels can be thinned out |
+| `bucketToDate(bucket, unit)` | The `Date` a time bucket label from the server starts at, such as `"2026-Q4"` for `quarter` |
+| `stepDate(date, unit)` | The start of the next bucket |
+| `fmtBucket(date, unit)` | A bucket's label for display |
+| `allBuckets(dates, unit, max)` | Every bucket from the first date to the last, so gaps can be shown, or `null` past `max` |
+| `annotate(el, ctx, make, axes)` | Draws the spec's annotations. `make(margins)` draws the plot with `Plot.plot()`, and may be called again with more room for labels. `axes` says how the spec's `x` and `y` map to the screen. Returns the plot to mount |
+| `bandMatcher(names, keys)` | For `axes.x.match`: finds the band a category annotation names, by its label or its key |
+| `parseMoment(value)` | The period an annotation's time value names, as `{start, end}`, or `null` |
+
+The `axes` that `annotate()` takes are `{x: {screen, kind, match}, y: {screen, kind}, lookup, marks}`. `screen` is `"x"`, `"y"` or `"fy"`, and `kind` is `"band"`, `"time"` or `"number"`. A band axis needs `match(value)`, which returns the band an annotation's value names, or `null`: `bandMatcher()` makes one. `lookup(annotation)` returns the data point a callout with no `y` points at, and `marks(plot)` returns where the data is drawn, in pixels, as `{rects: [{left, top, right, bottom}], lines: [[{X, Y}, ...]]}`, so labels can keep off it. The chart type's `annotation_types` and `annotation_axes` must say the same. The built-in renderers are the examples: `renderers/bar.js` for bands, `renderers/line.js` for time.
+
+`ctx.theme` has `mode` (`"light"` or `"dark"`, from the background the chart sits on), `surface` (that background), `ink` and `ink2` (text), `muted` (rules and secondary marks), `grid`, `series` (a list of colors for series), `other` (for an "Other" series), `sequential` (a color ramp, lightest for near zero in light mode) and `land` (for maps).
+
+New helpers and fields may be added. The built-in chart types in `datasette_charts/chart_types/` and their renderers in `datasette_charts/static/renderers/` are the reference. This interface is not stable yet.
 
 ## Potential future improvements
 

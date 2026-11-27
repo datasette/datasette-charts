@@ -1,7 +1,10 @@
 """
-Every renderer is handed the modules the built-in renderers draw with, as
-``ctx.helpers``, so that a chart type from another plugin can use the same
-theme, formatting and annotation layout without knowing where they are.
+Every renderer is handed ``ctx.helpers``: the public part of what the
+built-in renderers draw with, so that a chart type from another plugin can
+look like them and draw annotations without knowing where their files are.
+
+These tests pin that interface. A helper can be added (add it to HELPERS
+here and to the README too); renaming or removing one breaks other plugins.
 
 Run in node: a renderer written to a temporary file stands in for one from
 another plugin, and records what it was given.
@@ -14,7 +17,61 @@ import subprocess
 
 import pytest
 
-STATIC = pathlib.Path(__file__).parent.parent / "datasette_charts" / "static"
+ROOT = pathlib.Path(__file__).parent.parent
+STATIC = ROOT / "datasette_charts" / "static"
+
+# Each helper, and the module the built-in renderers import it from
+HELPERS = {
+    "TIP": "common",
+    "basePlot": "common",
+    "mount": "common",
+    "isThumbnail": "common",
+    "xLabel": "common",
+    "valueAxisMargin": "common",
+    "fmt": "common",
+    "fmtCompact": "common",
+    "truncate": "common",
+    "categoryName": "common",
+    "uniqueNames": "common",
+    "seriesColor": "common",
+    "textWidth": "common",
+    "fitBandLabels": "common",
+    "orderedValues": "common",
+    "bucketToDate": "common",
+    "stepDate": "common",
+    "fmtBucket": "common",
+    "allBuckets": "common",
+    "annotate": "annotations",
+    "bandMatcher": "annotations",
+    "parseMoment": "annotations",
+}
+# The ctx fields a renderer can rely on
+CTX_FIELDS = [
+    "spec",
+    "rows",
+    "columns",
+    "data",
+    "meta",
+    "size",
+    "width",
+    "height",
+    "Plot",
+    "d3",
+    "theme",
+    "helpers",
+]
+THEME_TOKENS = [
+    "mode",
+    "surface",
+    "ink",
+    "ink2",
+    "muted",
+    "grid",
+    "series",
+    "other",
+    "sequential",
+    "land",
+]
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
 
@@ -44,35 +101,66 @@ def draw_with(renderer_path):
     return json.loads(result.stdout)
 
 
-def test_renderers_get_the_built_in_helpers(tmp_path):
+@pytest.fixture(scope="module")
+def seen(tmp_path_factory):
+    "What a renderer from another plugin is handed"
     common = (STATIC / "renderers" / "common.js").as_uri()
     annotations = (STATIC / "renderers" / "annotations.js").as_uri()
-    renderer = tmp_path / "other.js"
+    renderer = tmp_path_factory.mktemp("other") / "other.js"
     renderer.write_text(f"""
     import * as common from {json.dumps(common)};
     import * as annotations from {json.dumps(annotations)};
+    const modules = {{ common, annotations }};
     export function render(el, ctx) {{
       const {{ helpers }} = ctx;
       globalThis.seen = {{
-        // The very modules a built-in renderer imports, not copies
-        same: helpers.common === common && helpers.annotations === annotations,
+        ctx: Object.keys(ctx),
         frozen: Object.isFrozen(helpers),
-        basePlot: typeof helpers.common.basePlot,
-        themeFor: typeof helpers.common.themeFor,
-        fmt: typeof helpers.common.fmt,
-        annotate: typeof helpers.annotations.annotate,
+        helpers: Object.fromEntries(
+          Object.keys(helpers).map((name) => [name, typeof helpers[name]])
+        ),
+        // The very functions the built-in renderers import, not copies
+        same: Object.fromEntries(
+          Object.entries({json.dumps(HELPERS)}).map(([name, module]) => [
+            name,
+            typeof helpers[name] === "function"
+              ? helpers[name] === modules[module][name]
+              : JSON.stringify(helpers[name]) === JSON.stringify(modules[module][name]),
+          ])
+        ),
+        tipFrozen: Object.isFrozen(helpers.TIP),
+        theme: Object.keys(ctx.theme),
       }};
     }}
     """)
     drawn = draw_with(renderer)
-    assert drawn == {
-        "ok": True,
-        "seen": {
-            "same": True,
-            "frozen": True,
-            "basePlot": "function",
-            "themeFor": "function",
-            "fmt": "function",
-            "annotate": "function",
-        },
-    }
+    assert drawn["ok"]
+    return drawn["seen"]
+
+
+def test_helpers_are_exactly_the_public_set(seen):
+    assert sorted(seen["helpers"]) == sorted(HELPERS)
+    expected = {name: "function" for name in HELPERS}
+    expected["TIP"] = "object"
+    assert seen["helpers"] == expected
+
+
+def test_helpers_are_the_built_in_renderers_own(seen):
+    assert seen["same"] == {name: True for name in HELPERS}
+
+
+def test_helpers_cannot_be_changed_by_a_renderer(seen):
+    assert seen["frozen"]
+    assert seen["tipFrozen"]
+
+
+def test_ctx_fields_and_theme_tokens(seen):
+    assert set(CTX_FIELDS) <= set(seen["ctx"])
+    assert sorted(seen["theme"]) == sorted(THEME_TOKENS)
+
+
+def test_readme_documents_every_helper_field_and_token():
+    readme = (ROOT / "README.md").read_text()
+    section = readme[readme.index("## Adding chart types") :]
+    for name in [*HELPERS, *CTX_FIELDS, *THEME_TOKENS]:
+        assert f"`{name}`" in section or f"`{name}(" in section, name

@@ -186,7 +186,7 @@ class StackedBar(BuiltinChartType):
             f"{source.with_clause()},\n"
             f"_chart_base as {not_materialized()}(select {key} as k,"
             f" {quote(series['column'])} as s, {measure_sql(y)} as v"
-            f" from source{where}),\n"
+            f" from _chart_source{where}),\n"
             f"_chart_x_rank as ({x_rank}),\n"
             "_chart_series_rank as (\n"
             f"  select s, row_number() over (order by {rank_over(y)} desc, s) as rn\n"

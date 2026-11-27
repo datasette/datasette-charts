@@ -166,7 +166,7 @@ class Bar(BuiltinChartType):
         rank = "value" if additive else "n"
         ctes = (
             f"{source.with_clause()},\n"
-            f"_chart_base as (select {key} as k, {measure_sql(y)} as v from source),\n"
+            f"_chart_base as (select {key} as k, {measure_sql(y)} as v from _chart_source),\n"
             f"_chart_grouped as (\n  select k as key, {aggregate_over(y)} as value,"
             " count(*) as n\n  from _chart_base group by 1\n),\n"
             "_chart_ranked as (\n  select key, value,"

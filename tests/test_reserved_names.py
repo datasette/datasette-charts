@@ -1,8 +1,8 @@
 """
 Tables named like the CTEs in the plugin's own SQL.
 
-Every profile and chart query wraps its source as ``with source as (...)``
-and adds steps of its own. A table with one of those names must still be
+Every profile and chart query wraps its source as ``with _chart_source as
+(...)`` and adds steps of its own. A table with one of those names must still be
 read as the table, not as the step: SQLite would otherwise report a
 circular reference.
 """
@@ -15,8 +15,8 @@ import pytest
 import pytest_asyncio
 from datasette.app import Datasette
 
-# The source CTE, and the names chart and profile queries used for their own
-# steps before they were prefixed
+# The names chart and profile queries used for their own steps before they
+# were prefixed
 NAMES = [
     "source",
     "base",
@@ -184,9 +184,9 @@ async def test_filtered_table_named_like_a_step(ds, name):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", [n for n in NAMES if n != "source"])
+@pytest.mark.parametrize("name", NAMES)
 async def test_query_reading_a_table_named_like_a_step(ds, name):
-    "The source CTE is still called source, but none of the steps after it"
+    "A query cannot be qualified with a schema, so this relies on the prefix"
     sql = f'select * from "{name}"'
     suggest = await get_json(ds, "/reserved/-/charts/suggest.json", sql=sql)
     assert suggest["suggestions"]

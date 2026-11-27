@@ -113,7 +113,7 @@ class Map(BuiltinChartType):
         size_column = f", {quote(size['column'])} as v" if size else ""
         points = (
             f"select {quote(latitude)} as lat, {quote(longitude)} as lon{size_column}"
-            " from source\n"
+            " from _chart_source\n"
             f"  where {numeric_filter(latitude)} and {numeric_filter(longitude)}\n"
             f"  and {quote(latitude)} between -90 and 90"
             f" and {quote(longitude)} between -180 and 180"

@@ -230,7 +230,7 @@ class Line(BuiltinChartType):
             sql = (
                 f"{source.with_clause()},\n"
                 f"_chart_base as (select {dimension['bucket']} as b, {measure_sql(y)} as v"
-                f" from source{where})\n"
+                f" from _chart_source{where})\n"
                 "select bucket, value from (\n"
                 f"  select b as bucket, {value} as value from _chart_base group by 1\n"
                 ") where bucket is not null and value is not null\n"
@@ -252,7 +252,7 @@ class Line(BuiltinChartType):
             f"{source.with_clause()},\n"
             f"_chart_base as {not_materialized()}(select {dimension['bucket']} as b,"
             f" {quote(series['column'])} as s, {measure_sql(y)} as v"
-            f" from source{where}),\n"
+            f" from _chart_source{where}),\n"
             "_chart_series_rank as (\n"
             f"  select s, row_number() over (order by {rank_over(y)} desc, s) as rn\n"
             "  from _chart_base where b is not null group by 1\n"

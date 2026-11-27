@@ -110,7 +110,7 @@ async def test_data_json(ds):
     assert data["truncated"] is False
     assert data["meta"]["timeUnit"] == "year"
     # The compiled SQL is there for actors who could have run it themselves
-    assert data["sql"].startswith("with source as (")
+    assert data["sql"].startswith("with _chart_source as (")
     sql_page = await ds.client.get(data["sql_url"] + "&_shape=array")
     assert sql_page.status_code == 200
 

@@ -92,7 +92,7 @@ class Scatter(BuiltinChartType):
         x, y = encoding["x"], encoding["y"]
         qx, qy = quote(x["column"]), quote(y["column"])
         points = (
-            f"select {qx} as x, {qy} as y from source\n"
+            f"select {qx} as x, {qy} as y from _chart_source\n"
             f"  where {numeric_filter(x['column'])} and {numeric_filter(y['column'])}"
         )
         meta = {"x": x["column"], "y": y["column"]}

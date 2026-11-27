@@ -126,7 +126,7 @@ class Source:
     query_name: str | None = None
 ```
 
-- Every profiling and chart query has the shape `with source as (...) select ... from source`. The CTE body is `select * from "table"` for tables and views, or the query's own SQL.
+- Every profiling and chart query has the shape `with _chart_source as (...) select ... from _chart_source`. The CTE body is `select * from "table"` for tables and views, or the query's own SQL.
 - `Source.key` identifies the source for stored profiles: the table name, or a SHA-256 of the SQL plus canonical JSON params.
 - Table sources with a rowid allow cheap tricks that queries and views do not: evenly spaced sampling, chunked scans and `max(rowid)` as a growth signal.
 - Arbitrary queries are re-executed by every profiling and chart query that wraps them. That is accepted for now (D4).
@@ -234,7 +234,7 @@ The patterns in this section and in section 11 were run against a 200,000-row SQ
 **One scan for many columns.** Basic facts for every column come from a single aggregate query, with one group of expressions per column:
 
 ```sql
-with source as (select * from "orders")
+with _chart_source as (select * from "orders")
 select
   count(*) as row_count,
   count("price") as price__non_null,
@@ -245,14 +245,14 @@ select
   max("price") as price__max,
   avg(case when typeof("price") in ('integer', 'real') then "price" end) as price__mean
   -- ...repeated for each column
-from source
+from _chart_source
 ```
 
 **Capped distinct counts.** Chart heuristics mostly need to know whether a column has few distinct values, not the exact count. This stops as soon as the cap is passed:
 
 ```sql
-with source as (select * from "orders")
-select count(*) from (select distinct "status" from source limit 1001)
+with _chart_source as (select * from "orders")
+select count(*) from (select distinct "status" from _chart_source limit 1001)
 ```
 
 A high-cardinality column returns almost instantly. A low-cardinality column without an index still needs a full scan, so in the sample tier this runs against the sample.
@@ -260,7 +260,7 @@ A high-cardinality column returns almost instantly. A low-cardinality column wit
 **Top values.** For columns under the distinct cap only:
 
 ```sql
-select "status", count(*) as n from source group by 1 order by n desc limit 20
+select "status", count(*) as n from _chart_source group by 1 order by n desc limit 20
 ```
 
 **Sampling.** For rowid tables, the proposed sample is evenly spaced rowid probes. It is deterministic, spans the whole table, and costs one index lookup per probe:
@@ -274,7 +274,7 @@ with recursive probes(i, r) as (
 select t.* from probes join "orders" t on t.rowid = probes.r
 ```
 
-`:lo` and `:step` come from `min(rowid)` and `max(rowid)`, which are both instant. Deleted rows produce misses, so the sample can be smaller than `:n`. For views, queries and tables without a rowid, the fallback is the first N rows (`select * from source limit :n`), which is cheap but biased toward whatever order the source produces.
+`:lo` and `:step` come from `min(rowid)` and `max(rowid)`, which are both instant. Deleted rows produce misses, so the sample can be smaller than `:n`. For views, queries and tables without a rowid, the fallback is the first N rows (`select * from _chart_source limit :n`), which is cheap but biased toward whatever order the source produces.
 
 **Chunked full scans.** For rowid tables, the full tier runs the one-scan query in rowid ranges (`where rowid >= :lo and rowid < :hi`) and merges results in Python. Counts, sums, minimums and maximums merge exactly. This keeps each query short, frees the SQL thread between chunks, and gives a natural progress measure. Distinct counts and top values do not merge across chunks, so they run afterwards as separate per-column queries, each under a time limit; a column whose query times out keeps its sample-tier estimate.
 
@@ -282,7 +282,7 @@ Queries and views cannot be chunked. Their full profile is one aggregate query u
 
 ### 7.5 Temporal detection
 
-The profiler detects date and timestamp columns itself (D15). Detection is part of the profile, so it works the same way for tables, views and queries: it reads values through the `source` CTE and needs nothing from the schema.
+The profiler detects date and timestamp columns itself (D15). Detection is part of the profile, so it works the same way for tables, views and queries: it reads values through the `_chart_source` CTE and needs nothing from the schema.
 
 **Kinds.** A temporal column has one kind, which records how its values are encoded:
 
@@ -326,7 +326,7 @@ Columns that match on values but lack the required hint are not given the tempor
 **SQL.** The value tests are extra expressions in the one-scan query from section 7.4:
 
 ```sql
-with source as (select * from "orders")
+with _chart_source as (select * from "orders")
 select
   sum("created_at" is not null and "created_at" != '') as created_at__n_present,
   sum(typeof("created_at") = 'text'
@@ -342,19 +342,19 @@ select
   sum(typeof("created_at") = 'integer'
       and "created_at" between 1000 and 2200) as created_at__n_year
   -- ...repeated for each column
-from source
+from _chart_source
 ```
 
 Once a column has a kind, a second query gets its range. For the text kinds this goes through `julianday()`, so values with different offsets compare correctly:
 
 ```sql
-with source as (select * from "orders")
+with _chart_source as (select * from "orders")
 select
   datetime(min(julianday("created_at"))) as earliest,
   datetime(max(julianday("created_at"))) as latest,
   sum("created_at" glob '*[0-9]Z'
       or "created_at" glob '*[+-][0-9][0-9]:[0-9][0-9]') as n_with_offset
-from source
+from _chart_source
 where typeof("created_at") = 'text'
   and "created_at" glob '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]*'
   and julianday("created_at") is not null
@@ -541,7 +541,7 @@ class ChartType:
         checks the spec against `channels`."""
 
     def compile(self, spec: dict, source: Source, profile: Profile | None) -> CompiledQuery:
-        """Return SQL and params that select from the `source` CTE and
+        """Return SQL and params that select from the `_chart_source` CTE and
         return at most `max_rows` rows."""
 
     def title(self, spec: dict) -> str:
@@ -628,8 +628,8 @@ Every chart type must guarantee an upper bound on the rows it returns, independe
 
 A table can have any name, including one a chart's own SQL uses for a CTE. Two rules keep such a table working:
 
-- A real table is always written with its schema, as `main."orders"`, through `sources.table_ref()`. That covers the `source` CTE's own body, the profiler's rowid samples and foreign key label lookups. A CTE name never shadows a schema-qualified table.
-- A chart type's own CTEs are prefixed `_chart_` (`_chart_base`, `_chart_ranked` and so on), and the profiler's are too (`_chart_profiled`). Third-party chart types should do the same. The prefix also covers SQL query sources, whose SQL cannot be qualified: only a query that reads a table named `source` still clashes, since `source` is the name every chart type selects from.
+- A real table is always written with its schema, as `main."orders"`, through `sources.table_ref()`. That covers the `_chart_source` CTE's own body, the profiler's rowid samples and foreign key label lookups. A CTE name never shadows a schema-qualified table.
+- Every CTE in the plugin's SQL is prefixed `_chart_`: the source itself (`_chart_source`, also exported as `datasette_charts.SOURCE_CTE`), the chart types' own (`_chart_base`, `_chart_ranked` and so on) and the profiler's (`_chart_profiled`). Third-party chart types should prefix theirs the same way. The prefix is what covers SQL query sources, whose SQL cannot be qualified: only a query that reads a table whose name starts with `_chart_` could still clash.
 
 ## 9. The chart DSL
 
@@ -772,11 +772,11 @@ Not in scope now (D5). The natural attachment points are re-ranking the determin
 **Histogram.** Suggested specs carry `start` and `step` from the profile:
 
 ```sql
-with source as (select * from "listings")
+with _chart_source as (select * from "listings")
 select
   cast(("price" - :start) / :step as integer) as bucket,
   count(*) as n
-from source
+from _chart_source
 where typeof("price") in ('integer', 'real')
 group by 1
 order by 1
@@ -787,9 +787,9 @@ If the data has grown beyond the profiled range, extra buckets appear. The compi
 **Top N plus "Other"** (category bar), using a window function:
 
 ```sql
-with source as (select * from "orders"),
+with _chart_source as (select * from "orders"),
 grouped as (
-  select "status" as key, count(*) as value from source group by 1
+  select "status" as key, count(*) as value from _chart_source group by 1
 ),
 ranked as (
   select key, value, row_number() over (order by value desc, key) as rn
@@ -809,11 +809,11 @@ order by min(rn, :limit + 1)
 **Time buckets** (time-series line). The time unit is chosen from the temporal span so the bucket count stays in the low hundreds. The bucketing expression depends on the column's temporal kind (section 7.5); this example is for an `iso_datetime` column:
 
 ```sql
-with source as (select * from "orders")
+with _chart_source as (select * from "orders")
 select
   strftime('%Y-%m', "created_at") as bucket,
   count(*) as value
-from source
+from _chart_source
 group by 1
 having bucket is not null
 order by 1
@@ -825,20 +825,20 @@ The `having` clause drops nulls and any values that cannot be parsed as dates. M
 **Top K series over time** (multi-series line, grouped and stacked bar):
 
 ```sql
-with source as (select * from "orders"),
+with _chart_source as (select * from "orders"),
 series_rank as (
   select "status" as s,
          row_number() over (order by count(*) desc, "status") as rn
-  from source
+  from _chart_source
   group by 1
 )
 select
   strftime('%Y-%m', "created_at") as bucket,
-  case when r.rn <= :series_limit then source."status" end as series,
+  case when r.rn <= :series_limit then _chart_source."status" end as series,
   r.rn > :series_limit as is_other,
   count(*) as value
-from source
-join series_rank r on r.s is source."status"
+from _chart_source
+join series_rank r on r.s is _chart_source."status"
 group by 1, min(r.rn, :series_limit + 1)
 order by 1, min(r.rn, :series_limit + 1)
 ```
@@ -846,11 +846,11 @@ order by 1, min(r.rn, :series_limit + 1)
 **Downsampling an ordered series** with `ntile`, for a measure plotted against a numeric or sequence axis. Each tile keeps its minimum, maximum and mean, which the renderer draws as a band with a line through it:
 
 ```sql
-with source as (select * from "readings"),
+with _chart_source as (select * from "readings"),
 tiled as (
   select "seq" as t, "value" as v,
          ntile(:buckets) over (order by "seq") as tile
-  from source
+  from _chart_source
   where "seq" is not null and "value" is not null
 )
 select tile, min(t) as t_start, max(t) as t_end,
@@ -865,12 +865,12 @@ This needs a sort unless the ordering column is indexed, so time-bucket grouping
 **Two-dimensional bins** (scatter on large sources), drawn as a heatmap:
 
 ```sql
-with source as (select * from "listings")
+with _chart_source as (select * from "listings")
 select
   cast(("price" - :x_start) / :x_step as integer) as bx,
   cast(("sqft" - :y_start) / :y_step as integer) as by,
   count(*) as n
-from source
+from _chart_source
 where typeof("price") in ('integer', 'real')
   and typeof("sqft") in ('integer', 'real')
 group by 1, 2
@@ -881,12 +881,12 @@ When the profile shows the source is small enough, scatter returns raw points in
 **Geographic grid** (map on large sources). `:precision` is chosen from the coordinate extent:
 
 ```sql
-with source as (select * from "stores")
+with _chart_source as (select * from "stores")
 select
   round("latitude", :precision) as lat,
   round("longitude", :precision) as lon,
   count(*) as n
-from source
+from _chart_source
 where "latitude" between -90 and 90
   and "longitude" between -180 and 180
 group by 1, 2
@@ -1077,7 +1077,7 @@ M1 is deliberately the thinnest slice that exercises every interface: three char
 3. **Expensive arbitrary queries.** Every profile and chart query re-runs the wrapped query. Deferred, with materializing to a temporary table as the likely answer.
 4. **Slow chart queries.** What should happen when a chart's own query exceeds the time limit on a very large table: chart a sample with a visible label, or run it in the background and cache the result?
 5. **Precomputed thumbnails.** Should the background worker also compute and store chart data for the top suggestions, so previews on large tables cost nothing?
-6. **Filtered table views.** Should charts on a filtered table page reflect the filters? A proposal: take suggestions from the whole-table profile, and apply the filters inside the `source` CTE when fetching chart data.
+6. **Filtered table views.** Should charts on a filtered table page reflect the filters? A proposal: take suggestions from the whole-table profile, and apply the filters inside the `_chart_source` CTE when fetching chart data.
 7. **Map rendering.** Observable Plot can draw points on a projection but needs basemap geometry from somewhere. The alternative is a tile-based map library for this one chart type.
 8. **Thread pool pressure.** How much does background profiling slow page requests with three SQL threads, and is a dedicated executor in core worth it?
 9. **Staleness thresholds.** Are 24 hours and 10% right? Should they scale with table size?

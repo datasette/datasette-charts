@@ -161,7 +161,7 @@ async def _profile(datasette, db, source, config, runner, profile) -> None:
     # How big is it?
     try:
         results = await runner.execute(
-            f"{source.with_clause()}\nselect count(*) from source"
+            f"{source.with_clause()}\nselect count(*) from _chart_source"
         )
         profile.row_count = results.rows[0][0]
         profile.row_count_exact = True
@@ -234,7 +234,7 @@ async def _profile(datasette, db, source, config, runner, profile) -> None:
 async def _schema(datasette, db, source, runner, profile) -> list:
     if source.kind != "table":
         results = await runner.execute(
-            f"{source.with_clause()}\nselect * from source limit 0"
+            f"{source.with_clause()}\nselect * from _chart_source limit 0"
         )
         return [
             ColumnProfile(name=column.name, position=i)

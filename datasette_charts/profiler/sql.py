@@ -3,7 +3,7 @@ SQL generation for the profiler (spec sections 7.4 and 7.5).
 
 Every query has the shape::
 
-    with source as (...), _chart_profiled as (...) select ... from _chart_profiled
+    with _chart_source as (...), _chart_profiled as (...) select ... from _chart_profiled
 
 ``_chart_profiled`` is the whole source, or a sample of it.
 """
@@ -34,12 +34,14 @@ def _hint(materialized: bool) -> str:
 
 
 def full_cte(materialized: bool) -> str:
-    return f"_chart_profiled as {_hint(materialized)}(select * from source)"
+    return f"_chart_profiled as {_hint(materialized)}(select * from _chart_source)"
 
 
 def first_n_cte() -> str:
     "Cheap, but biased toward whatever order the source produces"
-    return f"_chart_profiled as {_hint(True)}(select * from source limit :sample_n)"
+    return (
+        f"_chart_profiled as {_hint(True)}(select * from _chart_source limit :sample_n)"
+    )
 
 
 def rowid_probe_cte(table: str) -> str:

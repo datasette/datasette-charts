@@ -37,7 +37,7 @@ Charts never fetch every row. Each one compiles to a SQL query that returns a sm
 | `scatter` | Two numeric columns: points for small sources, a binned heatmap for large ones | There are two measures |
 | `map` | Latitude and longitude: points for small sources, grid cells for large ones | A latitude/longitude pair exists |
 | `stacked_bar` | Stacked or grouped bars for two categories, or a category over time | There are two categories |
-| `calendar` | A count or an aggregate for each day, as a calendar with one block per year, for up to the last 10 years | A date or timestamp column has rows on many of the days it spans |
+| `calendar` | A count or an aggregate for each day, as a calendar with one block per year. The `years` option (1, 2, 3, 5 or 10) picks how many, counted back from the year of the latest date, not from today | A date or timestamp column has rows on many of the days it spans |
 | `box` | Box plots of a numeric column for each of the most common values of a category: minimum, quartiles, median and maximum | There is a measure and a category with enough rows for each value |
 | `intervals` | How many rows are active at each point in time, from a start and an end column, optionally split by a category | Two date columns are named like a start and an end, such as `start_date` and `end_date` |
 

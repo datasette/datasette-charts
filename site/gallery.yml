@@ -160,9 +160,10 @@ sections:
       - id: calendar-days
         title: Releases per day
         text: >-
-          A count of releases for each day of the last three years, weeks
-          across and weekdays down. A few very busy days put the colors on a
-          square root scale, so the quieter days still stand apart.
+          A count of releases for each day of the three years up to the
+          latest one, weeks across and weekdays down. A few very busy days put
+          the colors on a square root scale, so the quieter days still stand
+          apart.
         database: content
         table: releases
         spec: {"v": 1, "type": "calendar", "encoding": {"x": {"column": "published_at"}, "y": {"aggregate": "count"}}, "options": {"years": "3"}}

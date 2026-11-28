@@ -168,11 +168,11 @@ sections:
         table: releases
         spec: {"v": 1, "type": "calendar_heatmap", "encoding": {"x": {"column": "published_at"}, "y": {"aggregate": "count"}}, "options": {"years": "3"}}
 
-  - type: box
+  - type: box_plot
     title: Box plots
     text: "How a numeric column is spread within each value of a category: minimum, quartiles, median and maximum."
     charts:
-      - id: box-log
+      - id: box-plot
         title: Power plant capacity by fuel, on a log scale
         text: >-
           One box per fuel, from the lower to the upper quartile, with a line
@@ -180,13 +180,13 @@ sections:
           The quartiles are worked out in SQL.
         database: data
         table: global_power_plant_database
-        spec: {"v": 1, "type": "box", "encoding": {"x": {"column": "primary_fuel", "limit": 12, "other": false}, "y": {"column": "capacity_mw"}}, "options": {"order": "median", "scale": "log"}}
+        spec: {"v": 1, "type": "box_plot", "encoding": {"x": {"column": "primary_fuel", "limit": 12, "other": false}, "y": {"column": "capacity_mw"}}, "options": {"order": "median", "scale": "log"}}
 
-  - type: intervals
+  - type: active_count
     title: Active over time
     text: How many rows are active at each point in time, for rows with a start and an end.
     charts:
-      - id: intervals
+      - id: active-count
         title: Repositories still being worked on
         text: >-
           Each repository counts from the month it was created up to the month
@@ -194,7 +194,7 @@ sections:
           one away where each ends, so no row is joined to another.
         database: content
         table: repos
-        spec: {"v": 1, "type": "intervals", "encoding": {"start": {"column": "created_at", "timeUnit": "month"}, "end": {"column": "pushed_at"}}, "options": {}}
+        spec: {"v": 1, "type": "active_count", "encoding": {"start": {"column": "created_at", "timeUnit": "month"}, "end": {"column": "pushed_at"}}, "options": {}}
 
   - id: annotations
     title: Annotations

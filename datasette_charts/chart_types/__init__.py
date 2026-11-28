@@ -8,10 +8,10 @@ from .base import (
     ChartType,
     CompiledQuery,
 )
-from .box import Box
+from .box_plot import BoxPlot
 from .calendar_heatmap import CalendarHeatmap
 from .histogram import Histogram
-from .intervals import Intervals
+from .active_count import ActiveCount
 from .line import Line
 from .map import Map
 from .scatter import Scatter
@@ -25,8 +25,8 @@ BUILTIN_CHART_TYPES = [
     Map,
     StackedBar,
     CalendarHeatmap,
-    Box,
-    Intervals,
+    BoxPlot,
+    ActiveCount,
 ]
 
 __all__ = [

@@ -31,8 +31,8 @@ TYPE_WEIGHTS = {
     "stacked_bar": 1.0,
     "scatter": 1.0,
     "calendar_heatmap": 1.0,
-    "box": 1.0,
-    "intervals": 1.0,
+    "box_plot": 1.0,
+    "active_count": 1.0,
 }
 # Candidates scoring under this are dropped before ranking
 MIN_SCORE = 0.3

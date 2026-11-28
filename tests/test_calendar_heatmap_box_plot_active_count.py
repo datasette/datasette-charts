@@ -1,5 +1,5 @@
 """
-The calendar heatmap, box and intervals chart types, against a database of small
+The calendar heatmap, box plot and active count chart types, against a database of small
 tables, each built to trigger (or not trigger) one of them. Everything is
 generated from the row number, so it is deterministic.
 """
@@ -16,13 +16,13 @@ from datasette.app import Datasette
 
 from datasette_charts import dsl, engine
 from datasette_charts.chart_types.calendar_heatmap import fit_years
-from datasette_charts.chart_types.intervals import is_start_end_pair
+from datasette_charts.chart_types.active_count import is_start_end_pair
 from datasette_charts.config import get_config
 from datasette_charts.profiler import profile_source
 from datasette_charts.sources import Source
 from datasette_charts.sqlgen import SpecError
 
-TYPES = ("calendar_heatmap", "box", "intervals")
+TYPES = ("calendar_heatmap", "box_plot", "active_count")
 KINDS = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
 EVENTS_START = datetime.datetime(2024, 1, 1, 8, 0, 0)
 PACKAGES = ["one", "two", "three"]
@@ -88,7 +88,7 @@ def build_database(path):
             )
         )
     conn.executemany("insert into terms values (?, ?, ?, ?, ?)", terms)
-    # Running totals worked out by hand: see test_intervals_running_totals
+    # Running totals worked out by hand: see test_active_count_running_totals
     conn.executemany(
         "insert into spans (party, start_date, end_date) values (?, ?, ?)",
         [
@@ -222,9 +222,14 @@ async def test_types_are_registered(ds):
         response = await ds.client.get(chart_type["js_url"])
         assert response.status_code == 200
         assert "export function render" in response.text
-    assert types["box"]["annotations"]["types"] == ["line", "range", "point", "text"]
-    assert types["box"]["annotations"]["axes"] == {"x": "category", "y": "number"}
-    assert types["intervals"]["annotations"]["axes"] == {"x": "time", "y": "number"}
+    assert types["box_plot"]["annotations"]["types"] == [
+        "line",
+        "range",
+        "point",
+        "text",
+    ]
+    assert types["box_plot"]["annotations"]["axes"] == {"x": "category", "y": "number"}
+    assert types["active_count"]["annotations"]["axes"] == {"x": "time", "y": "number"}
     # No straight time axis: free-floating notes only
     assert types["calendar_heatmap"]["annotations"]["types"] == ["text"]
     assert list(types["calendar_heatmap"]["options"]) == ["years"]
@@ -404,12 +409,12 @@ async def test_calendar_annotations(ds):
 
 
 @pytest.mark.asyncio
-async def test_box_quartiles(ds):
+async def test_box_plot_quartiles(ds):
     rows, compiled = await run(
         ds,
         table("boxes"),
         spec(
-            "box",
+            "box_plot",
             {"order": "name"},
             x={"column": "cat", "limit": 12},
             y={"column": "v"},
@@ -434,9 +439,12 @@ async def test_box_quartiles(ds):
 
 
 @pytest.mark.asyncio
-async def test_box_top_n_order_and_other(ds):
+async def test_box_plot_top_n_order_and_other(ds):
     chart = spec(
-        "box", {"order": "count"}, x={"column": "cat", "limit": 1}, y={"column": "v"}
+        "box_plot",
+        {"order": "count"},
+        x={"column": "cat", "limit": 1},
+        y={"column": "v"},
     )
     rows, _ = await run(ds, table("boxes"), chart)
     # a is the most common; Other is left out unless asked for
@@ -452,42 +460,44 @@ async def test_box_top_n_order_and_other(ds):
 
 
 @pytest.mark.asyncio
-async def test_box_orders_by_median(ds):
+async def test_box_plot_orders_by_median(ds):
     rows, _ = await run(
-        ds, table("boxes"), spec("box", {}, x={"column": "cat"}, y={"column": "v"})
+        ds, table("boxes"), spec("box_plot", {}, x={"column": "cat"}, y={"column": "v"})
     )
     assert [r["key"] for r in rows] == ["c", "a", "b"]
 
 
 @pytest.mark.asyncio
-async def test_box_proposals(ds):
-    candidates = await proposed(ds, "events", "box")
+async def test_box_plot_proposals(ds):
+    candidates = await proposed(ds, "events", "box_plot")
     assert candidates
     encoding = candidates[0].spec["encoding"]
     assert encoding["x"]["column"] == "kind"
     assert encoding["y"] == {"column": "amount"}
     assert candidates[0].signals["name_hint"] is True
     # Too few rows per box to be worth it
-    assert await proposed(ds, "boxes", "box") == []
+    assert await proposed(ds, "boxes", "box_plot") == []
 
 
 @pytest.mark.asyncio
-async def test_box_log_scale_needs_positive_values(ds):
-    chart = spec("box", {"scale": "log"}, x={"column": "cat"}, y={"column": "v"})
+async def test_box_plot_log_scale_needs_positive_values(ds):
+    chart = spec("box_plot", {"scale": "log"}, x={"column": "cat"}, y={"column": "v"})
     _, compiled = await run(ds, table("boxes"), chart)
     assert compiled.meta["scale"] == "log"
-    chart = spec("box", {"scale": "log"}, x={"column": "name"}, y={"column": "size"})
+    chart = spec(
+        "box_plot", {"scale": "log"}, x={"column": "name"}, y={"column": "size"}
+    )
     with pytest.raises(SpecError, match="values of zero or less"):
         await run(ds, table("plain"), chart)
 
 
 @pytest.mark.asyncio
-async def test_box_validation(ds):
+async def test_box_plot_validation(ds):
     errors = await validate(
         ds,
         "boxes",
         spec(
-            "box",
+            "box_plot",
             x={"column": "cat", "limit": 60},
             y={"column": "v", "aggregate": "sum"},
         ),
@@ -495,11 +505,11 @@ async def test_box_validation(ds):
     assert "y does not take an aggregate" in errors
     assert "x: limit must be at most 50 on this chart" in errors
     errors = await validate(
-        ds, "boxes", spec("box", {"order": "size"}, x={"column": "cat"})
+        ds, "boxes", spec("box_plot", {"order": "size"}, x={"column": "cat"})
     )
     assert "y is required" in errors
     assert "order must be one of median, count, name" in errors
-    chart = spec("box", x={"column": "cat"}, y={"column": "v"})
+    chart = spec("box_plot", x={"column": "cat"}, y={"column": "v"})
     chart["annotations"] = [
         {"type": "line", "y": 3, "text": "Target"},
         {"type": "range", "x": "a", "x2": "b", "text": "These two"},
@@ -509,7 +519,7 @@ async def test_box_validation(ds):
     assert await validate(ds, "boxes", chart) == []
 
 
-# --- intervals --------------------------------------------------------------------
+# --- active count --------------------------------------------------------------------
 
 
 def test_start_end_names():
@@ -533,8 +543,8 @@ def test_start_end_names():
 
 
 @pytest.mark.asyncio
-async def test_intervals_proposals(ds):
-    candidates = await proposed(ds, "terms", "intervals")
+async def test_active_count_proposals(ds):
+    candidates = await proposed(ds, "terms", "active_count")
     assert [c.spec["encoding"]["start"]["column"] for c in candidates] == [
         "start_date",
         "start_date",
@@ -547,16 +557,16 @@ async def test_intervals_proposals(ds):
         "Rows active each quarter from start_date to end_date"
     )
     # created_at and updated_at are not a start and an end
-    assert await proposed(ds, "events", "intervals") == []
+    assert await proposed(ds, "events", "active_count") == []
 
 
 @pytest.mark.asyncio
-async def test_intervals_running_totals(ds):
+async def test_active_count_running_totals(ds):
     rows, _ = await run(
         ds,
         table("spans"),
         spec(
-            "intervals",
+            "active_count",
             start={"column": "start_date", "timeUnit": "year"},
             end={"column": "end_date"},
         ),
@@ -574,12 +584,12 @@ async def test_intervals_running_totals(ds):
 
 
 @pytest.mark.asyncio
-async def test_intervals_by_series(ds):
+async def test_active_count_by_series(ds):
     rows, compiled = await run(
         ds,
         table("spans"),
         spec(
-            "intervals",
+            "active_count",
             start={"column": "start_date", "timeUnit": "year"},
             end={"column": "end_date"},
             series={"column": "party", "limit": 1, "other": True},
@@ -598,13 +608,13 @@ async def test_intervals_by_series(ds):
 
 
 @pytest.mark.asyncio
-async def test_intervals_terms_add_up(ds):
+async def test_active_count_terms_add_up(ds):
     "Two-year terms starting every month: 24 active at once, once under way"
     rows, _ = await run(
         ds,
         table("terms"),
         spec(
-            "intervals",
+            "active_count",
             start={"column": "start_date", "timeUnit": "month"},
             end={"column": "end_date"},
         ),
@@ -617,15 +627,17 @@ async def test_intervals_terms_add_up(ds):
 
 
 @pytest.mark.asyncio
-async def test_intervals_validation_and_bounds(ds):
+async def test_active_count_validation_and_bounds(ds):
     errors = await validate(
         ds,
         "terms",
-        spec("intervals", start={"column": "start_date"}, end={"column": "start_date"}),
+        spec(
+            "active_count", start={"column": "start_date"}, end={"column": "start_date"}
+        ),
     )
     assert "start and end must be different columns" in errors
     errors = await validate(
-        ds, "terms", spec("intervals", start={"column": "start_date"})
+        ds, "terms", spec("active_count", start={"column": "start_date"})
     )
     assert "end is required" in errors
     with pytest.raises(SpecError):
@@ -633,13 +645,13 @@ async def test_intervals_validation_and_bounds(ds):
             ds,
             table("terms"),
             spec(
-                "intervals",
+                "active_count",
                 start={"column": "start_date", "timeUnit": "day"},
                 end={"column": "end_date"},
             ),
         )
     chart = spec(
-        "intervals", start={"column": "start_date"}, end={"column": "end_date"}
+        "active_count", start={"column": "start_date"}, end={"column": "end_date"}
     )
     chart["annotations"] = [
         {"type": "line", "x": "2000", "text": "Election"},
@@ -656,11 +668,13 @@ async def test_intervals_validation_and_bounds(ds):
     "name,chart",
     (
         ("events", spec("calendar_heatmap", x={"column": "created_at"})),
-        ("events", spec("box", x={"column": "kind"}, y={"column": "amount"})),
+        ("events", spec("box_plot", x={"column": "kind"}, y={"column": "amount"})),
         (
             "spans",
             spec(
-                "intervals", start={"column": "start_date"}, end={"column": "end_date"}
+                "active_count",
+                start={"column": "start_date"},
+                end={"column": "end_date"},
             ),
         ),
     ),
@@ -683,7 +697,7 @@ async def test_data_json_rejects_bad_specs(ds):
     assert response.status_code == 400
     assert "A calendar heatmap needs dates" in response.json()["error"]
     response = await get_data(
-        ds, "boxes", spec("box", x={"column": "nope"}, y={"column": "v"})
+        ds, "boxes", spec("box_plot", x={"column": "nope"}, y={"column": "v"})
     )
     assert response.status_code == 400
     assert response.json()["errors"] == ["x: no such column: nope"]
@@ -693,4 +707,4 @@ async def test_data_json_rejects_bad_specs(ds):
 async def test_suggest_json(ds):
     response = await ds.client.get("/more/terms/-/charts/suggest.json")
     suggestions = response.json()["suggestions"]
-    assert suggestions[0]["spec"]["type"] == "intervals"
+    assert suggestions[0]["spec"]["type"] == "active_count"

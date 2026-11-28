@@ -54,8 +54,8 @@ def quantile_sql(q: float) -> str:
     return f"{at_lo} + {frac} * (coalesce({at_hi}, {at_lo}) - {at_lo})"
 
 
-class Box(BuiltinChartType):
-    name = "box"
+class BoxPlot(BuiltinChartType):
+    name = "box_plot"
     label = "Box plot"
     description = (
         "How a numeric column is distributed within each value of a category:"
@@ -67,7 +67,7 @@ class Box(BuiltinChartType):
         '<rect x="6" y="4" width="9" height="4"/><rect x="8" y="16" width="9" height="4"/>'
         '<rect x="9" y="10" width="5" height="4"/></svg>'
     )
-    js_file = "box.js"
+    js_file = "box_plot.js"
     channels = [
         Channel(
             name="x",

@@ -768,8 +768,8 @@ Not in scope now (D5). The natural attachment points are re-ranking the determin
 | Map | `latitude`, `longitude`; optional `size` | A latitude/longitude pair exists | Raw points under a threshold; otherwise grid cells |
 | Grouped / stacked bar | `x`: category or temporal; `series`: category; `y`: count or aggregated measure | Two categories, or a category over time | Top N by top K series |
 | Calendar heatmap (`calendar_heatmap`) | `x`: temporal; `y`: count or aggregated measure | A temporal column spans at least 90 days and has rows on at least 5% of them; one row per entity per day charts the measure, not the count | One row per day of the last `years` (1, 2, 3, 5 or 10) calendar years, counted back from the year of the latest date in the data, not from today |
-| Box plot (`box`) | `x`: category; `y`: measure | A measure, and a category with at least 8 rows per box | Top N categories, at most 50, plus an optional "Other" |
-| Active over time (`intervals`) | `start`, `end`: temporal; `series`: optional category | Two temporal columns are named as a start and an end, such as `start_date` and `end_date` | Number of time buckets times series |
+| Box plot (`box_plot`) | `x`: category; `y`: measure | A measure, and a category with at least 8 rows per box | Top N categories, at most 50, plus an optional "Other" |
+| Active over time (`active_count`) | `start`, `end`: temporal; `series`: optional category | Two temporal columns are named as a start and an end, such as `start_date` and `end_date` | Number of time buckets times series |
 
 ### 11.2 SQL patterns
 
@@ -872,7 +872,7 @@ group by key
 
 The real query keeps the top N groups first, as the bar chart does.
 
-**Rows active over time** (intervals). No row is joined to another: each row adds one at its start bucket and takes one away at its end bucket, and a running total over the buckets gives the count. A row counts from the bucket it starts in up to, but not including, the one it ends in, unless it starts and ends in the same bucket. A row with no end is still active at the end of the chart.
+**Rows active over time** (`active_count`). No row is joined to another: each row adds one at its start bucket and takes one away at its end bucket, and a running total over the buckets gives the count. A row counts from the bucket it starts in up to, but not including, the one it ends in, unless it starts and ends in the same bucket. A row with no end is still active at the end of the chart.
 
 ```sql
 with _chart_source as (select * from main."terms"),

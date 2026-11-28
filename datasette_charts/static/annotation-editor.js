@@ -60,7 +60,7 @@ export function axisKind(type, spec, channel, result) {
 function screenAxis(spec, channel, result) {
   const flat =
     (spec.type === "bar" && (spec.options || {}).orientation !== "vertical") ||
-    spec.type === "box" ||
+    spec.type === "box_plot" ||
     (spec.type === "stacked_bar" && !(result && result.meta && result.meta.timeUnit));
   if (!flat) return channel;
   return channel === "x" ? "y" : "x";
@@ -69,13 +69,13 @@ function screenAxis(spec, channel, result) {
 // The x values the chart shows: categories or time buckets
 function axisValues(spec, result) {
   const rows = rowsOf(result);
-  if (spec.type === "bar" || spec.type === "box") {
+  if (spec.type === "bar" || spec.type === "box_plot") {
     return unique(rows.filter((d) => !d.is_other).map((d) => categoryName(d.key, false, d.label)));
   }
   if (spec.type === "stacked_bar") {
     return unique(rows.filter((d) => !d.key_is_other).map((d) => categoryName(d.key, false, d.key_label)));
   }
-  if (spec.type === "line" || spec.type === "intervals") return unique(rows.map((d) => String(d.bucket)));
+  if (spec.type === "line" || spec.type === "active_count") return unique(rows.map((d) => String(d.bucket)));
   return [];
 }
 
@@ -91,8 +91,8 @@ function seriesValues(spec, result) {
 }
 
 function channelName(spec, channel, result) {
-  // The intervals chart's x axis is time, from its start column on
-  const key = spec.type === "intervals" && channel === "x" ? "start" : channel;
+  // The active count chart's x axis is time, from its start column on
+  const key = spec.type === "active_count" && channel === "x" ? "start" : channel;
   const encoding = (spec.encoding || {})[key] || {};
   if (encoding.column) return encoding.column;
   if (channel === "y" && result && result.meta && typeof result.meta.y === "string") return result.meta.y;

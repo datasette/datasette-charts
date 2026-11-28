@@ -26,7 +26,7 @@ NAMES = [
     "series_rank",
     "profiled",
     "probes",
-    # The calendar, box and intervals charts, from before they were built in
+    # CTE names the calendar, box and intervals charts used before they were built in
     "chart_days",
     "chart_groups",
     "chart_spans",
@@ -174,7 +174,7 @@ def handmade_specs():
         },
         {
             "v": 1,
-            "type": "box",
+            "type": "box_plot",
             "encoding": {
                 "x": {"column": "ref_id", "limit": 3, "other": True},
                 "y": {"column": "amount"},
@@ -182,7 +182,7 @@ def handmade_specs():
         },
         {
             "v": 1,
-            "type": "intervals",
+            "type": "active_count",
             "encoding": {
                 "start": {"column": "created_at", "timeUnit": "week"},
                 "end": {"column": "ended_at"},
@@ -190,7 +190,7 @@ def handmade_specs():
         },
         {
             "v": 1,
-            "type": "intervals",
+            "type": "active_count",
             "encoding": {
                 "start": {"column": "created_at", "timeUnit": "week"},
                 "end": {"column": "ended_at"},
@@ -233,7 +233,8 @@ async def test_query_reading_a_table_named_like_a_step(ds, name):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "type_,column", [("bar", "label"), ("box", "label"), ("intervals", "series_label")]
+    "type_,column",
+    [("bar", "label"), ("box_plot", "label"), ("active_count", "series_label")],
 )
 async def test_foreign_key_labels_from_a_table_named_like_a_step(ds, type_, column):
     "base.ref_id points at grouped, whose labels come from its name column"

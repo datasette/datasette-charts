@@ -1,5 +1,5 @@
 """
-intervals: how many rows are active over time, for rows with a start and an
+active_count: how many rows are active over time, for rows with a start and an
 end, such as terms of office, subscriptions or tickets. Optionally split
 into series by a category (the top K, with the rest as "Other").
 
@@ -156,8 +156,8 @@ def consistent(start, end) -> bool:
     return True
 
 
-class Intervals(BuiltinChartType):
-    name = "intervals"
+class ActiveCount(BuiltinChartType):
+    name = "active_count"
     label = "Active over time"
     description = (
         "How many rows are active at each point in time, from a start and an"
@@ -169,7 +169,7 @@ class Intervals(BuiltinChartType):
         '<polyline points="3,19 3,15 7,15 7,10 11,10 11,6 15,6 15,12 19,12 19,16 21,16"/>'
         "</svg>"
     )
-    js_file = "intervals.js"
+    js_file = "active_count.js"
     channels = [
         Channel(
             name="start", label="Start", roles=("temporal",), allows_time_unit=True

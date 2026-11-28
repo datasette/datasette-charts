@@ -1,7 +1,8 @@
 """
 calendar: one cell per day, like a contributions calendar. Weeks are
-columns and weekdays rows, with one block per year for the most recent few
-years.
+columns and weekdays rows, with one block per year. The ``years`` option
+counts back from the year of the latest date in the data, not from today, so
+a table that stopped in 2008 still gets a full calendar.
 
 Days are bucketed with the same time helpers as the line chart, so every
 temporal kind that can be bucketed by day works. A ``year`` column cannot

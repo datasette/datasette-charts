@@ -365,6 +365,21 @@ async def test_calendar_keeps_only_recent_years(ds):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("years,first", [("1", 2009), ("5", 2005), ("10", 2000)])
+async def test_calendar_years_count_back_from_the_latest_date(ds, years, first):
+    """
+    The years are the ones up to the latest date in the data, not up to today:
+    terms stopped starting in 2009, and still get a full calendar
+    """
+    rows, _ = await run(
+        ds,
+        table("terms"),
+        spec("calendar", {"years": years}, x={"column": "start_date"}),
+    )
+    assert {int(r["day"][:4]) for r in rows} == set(range(first, 2010))
+
+
+@pytest.mark.asyncio
 async def test_calendar_layout_option(ds):
     "Calendars once had a layout option: links to the days layout still work"
     chart = spec(

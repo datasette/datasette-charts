@@ -134,6 +134,30 @@
   quality: 85
   javascript: "new Promise(async (done) => {\n  const pause = (ms) => new Promise((r) => setTimeout(r, ms));\n  const until = async (test) => { for (let i = 0; i < 150 && !test(); i++) await pause(100); };\n  const drawn = () => {\n    const chart = document.querySelector(\".dc-view:not([hidden]) .dc-chart:not(.dc-loading)\");\n    return chart && chart.querySelector(\"svg\") && getComputedStyle(chart).opacity === \"1\";\n  };\n  const settled = async () => {\n    for (let i = 0, steady = 0; i < 300 && steady < 15; i++) {\n      steady = drawn() ? steady + 1 : 0;\n      await pause(100);\n    }\n  };\n\n  await until(drawn);\n  const style = document.createElement(\"style\");\n  style.textContent = \".dc-builder, .dc-close, .dc-links { display: none !important }\" +\n    \" .dc-view { border: 0 !important; margin: 0 !important; background: #fff !important }\";\n  document.head.append(style);\n  window.dispatchEvent(new Event(\"resize\"));\n  await pause(500);\n  await settled();\n  done();\n\
     })"
+- url: http://localhost:8571/content/releases#chart=%7B%22v%22%3A1%2C%22type%22%3A%22calendar%22%2C%22encoding%22%3A%7B%22x%22%3A%7B%22column%22%3A%22published_at%22%7D%2C%22y%22%3A%7B%22aggregate%22%3A%22count%22%7D%7D%2C%22options%22%3A%7B%22years%22%3A%223%22%7D%7D
+  output: site/screenshots/calendar-days.webp
+  width: 760
+  height: 1300
+  selector: .dc-view
+  quality: 85
+  javascript: "new Promise(async (done) => {\n  const pause = (ms) => new Promise((r) => setTimeout(r, ms));\n  const until = async (test) => { for (let i = 0; i < 150 && !test(); i++) await pause(100); };\n  const drawn = () => {\n    const chart = document.querySelector(\".dc-view:not([hidden]) .dc-chart:not(.dc-loading)\");\n    return chart && chart.querySelector(\"svg\") && getComputedStyle(chart).opacity === \"1\";\n  };\n  const settled = async () => {\n    for (let i = 0, steady = 0; i < 300 && steady < 15; i++) {\n      steady = drawn() ? steady + 1 : 0;\n      await pause(100);\n    }\n  };\n\n  await until(drawn);\n  const style = document.createElement(\"style\");\n  style.textContent = \".dc-builder, .dc-close, .dc-links { display: none !important }\" +\n    \" .dc-view { border: 0 !important; margin: 0 !important; background: #fff !important }\";\n  document.head.append(style);\n  window.dispatchEvent(new Event(\"resize\"));\n  await pause(500);\n  await settled();\n  done();\n\
+    })"
+- url: http://localhost:8571/data/global_power_plant_database#chart=%7B%22v%22%3A1%2C%22type%22%3A%22box%22%2C%22encoding%22%3A%7B%22x%22%3A%7B%22column%22%3A%22primary_fuel%22%2C%22limit%22%3A12%2C%22other%22%3Afalse%7D%2C%22y%22%3A%7B%22column%22%3A%22capacity_mw%22%7D%7D%2C%22options%22%3A%7B%22order%22%3A%22median%22%2C%22scale%22%3A%22log%22%7D%7D
+  output: site/screenshots/box-log.webp
+  width: 760
+  height: 1300
+  selector: .dc-view
+  quality: 85
+  javascript: "new Promise(async (done) => {\n  const pause = (ms) => new Promise((r) => setTimeout(r, ms));\n  const until = async (test) => { for (let i = 0; i < 150 && !test(); i++) await pause(100); };\n  const drawn = () => {\n    const chart = document.querySelector(\".dc-view:not([hidden]) .dc-chart:not(.dc-loading)\");\n    return chart && chart.querySelector(\"svg\") && getComputedStyle(chart).opacity === \"1\";\n  };\n  const settled = async () => {\n    for (let i = 0, steady = 0; i < 300 && steady < 15; i++) {\n      steady = drawn() ? steady + 1 : 0;\n      await pause(100);\n    }\n  };\n\n  await until(drawn);\n  const style = document.createElement(\"style\");\n  style.textContent = \".dc-builder, .dc-close, .dc-links { display: none !important }\" +\n    \" .dc-view { border: 0 !important; margin: 0 !important; background: #fff !important }\";\n  document.head.append(style);\n  window.dispatchEvent(new Event(\"resize\"));\n  await pause(500);\n  await settled();\n  done();\n\
+    })"
+- url: http://localhost:8571/content/repos#chart=%7B%22v%22%3A1%2C%22type%22%3A%22intervals%22%2C%22encoding%22%3A%7B%22start%22%3A%7B%22column%22%3A%22created_at%22%2C%22timeUnit%22%3A%22month%22%7D%2C%22end%22%3A%7B%22column%22%3A%22pushed_at%22%7D%7D%2C%22options%22%3A%7B%7D%7D
+  output: site/screenshots/intervals.webp
+  width: 760
+  height: 1300
+  selector: .dc-view
+  quality: 85
+  javascript: "new Promise(async (done) => {\n  const pause = (ms) => new Promise((r) => setTimeout(r, ms));\n  const until = async (test) => { for (let i = 0; i < 150 && !test(); i++) await pause(100); };\n  const drawn = () => {\n    const chart = document.querySelector(\".dc-view:not([hidden]) .dc-chart:not(.dc-loading)\");\n    return chart && chart.querySelector(\"svg\") && getComputedStyle(chart).opacity === \"1\";\n  };\n  const settled = async () => {\n    for (let i = 0, steady = 0; i < 300 && steady < 15; i++) {\n      steady = drawn() ? steady + 1 : 0;\n      await pause(100);\n    }\n  };\n\n  await until(drawn);\n  const style = document.createElement(\"style\");\n  style.textContent = \".dc-builder, .dc-close, .dc-links { display: none !important }\" +\n    \" .dc-view { border: 0 !important; margin: 0 !important; background: #fff !important }\";\n  document.head.append(style);\n  window.dispatchEvent(new Event(\"resize\"));\n  await pause(500);\n  await settled();\n  done();\n\
+    })"
 - url: http://localhost:8571/content/releases#chart=%7B%22v%22%3A1%2C%22type%22%3A%22line%22%2C%22encoding%22%3A%7B%22x%22%3A%7B%22column%22%3A%22published_at%22%2C%22timeUnit%22%3A%22quarter%22%7D%2C%22y%22%3A%7B%22aggregate%22%3A%22count%22%7D%7D%2C%22options%22%3A%7B%7D%2C%22annotations%22%3A%5B%7B%22type%22%3A%22line%22%2C%22x%22%3A%222022-11-29%22%2C%22text%22%3A%22Datasette%201.0a0%22%7D%5D%7D
   output: site/screenshots/annotation-line-x.webp
   width: 760

@@ -153,6 +153,48 @@ sections:
         table: pypi_releases
         spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "upload_time", "timeUnit": "year"}, "series": {"column": "packagetype", "limit": 6, "other": true}, "y": {"aggregate": "count"}}, "options": {"layout": "stacked"}}
 
+  - type: calendar
+    title: Calendar heatmaps
+    text: A count or an aggregate for each day, with one block per year.
+    charts:
+      - id: calendar-days
+        title: Releases per day
+        text: >-
+          A count of releases for each day of the last three years, weeks
+          across and weekdays down. A few very busy days put the colors on a
+          square root scale, so the quieter days still stand apart.
+        database: content
+        table: releases
+        spec: {"v": 1, "type": "calendar", "encoding": {"x": {"column": "published_at"}, "y": {"aggregate": "count"}}, "options": {"years": "3"}}
+
+  - type: box
+    title: Box plots
+    text: "How a numeric column is spread within each value of a category: minimum, quartiles, median and maximum."
+    charts:
+      - id: box-log
+        title: Power plant capacity by fuel, on a log scale
+        text: >-
+          One box per fuel, from the lower to the upper quartile, with a line
+          at the median and whiskers out to the smallest and largest plant.
+          The quartiles are worked out in SQL.
+        database: data
+        table: global_power_plant_database
+        spec: {"v": 1, "type": "box", "encoding": {"x": {"column": "primary_fuel", "limit": 12, "other": false}, "y": {"column": "capacity_mw"}}, "options": {"order": "median", "scale": "log"}}
+
+  - type: intervals
+    title: Active over time
+    text: How many rows are active at each point in time, for rows with a start and an end.
+    charts:
+      - id: intervals
+        title: Repositories still being worked on
+        text: >-
+          Each repository counts from the month it was created up to the month
+          of its latest push. The database adds one where each starts and takes
+          one away where each ends, so no row is joined to another.
+        database: content
+        table: repos
+        spec: {"v": 1, "type": "intervals", "encoding": {"start": {"column": "created_at", "timeUnit": "month"}, "end": {"column": "pushed_at"}}, "options": {}}
+
   - id: annotations
     title: Annotations
     text: >-

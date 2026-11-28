@@ -767,7 +767,7 @@ Not in scope now (D5). The natural attachment points are re-ranking the determin
 | Scatter / binned heatmap | `x`, `y`: measures | Two measures, ideally correlated or clustered | Raw points under a threshold; otherwise a bin grid |
 | Map | `latitude`, `longitude`; optional `size` | A latitude/longitude pair exists | Raw points under a threshold; otherwise grid cells |
 | Grouped / stacked bar | `x`: category or temporal; `series`: category; `y`: count or aggregated measure | Two categories, or a category over time | Top N by top K series |
-| Calendar heatmap (`calendar`) | `x`: temporal; `y`: count or aggregated measure | A temporal column spans at least 90 days and has rows on at least 5% of them; one row per entity per day charts the measure, not the count | One row per day of the last `years` (1, 2, 3, 5 or 10) calendar years, counted back from the year of the latest date in the data, not from today |
+| Calendar heatmap (`calendar_heatmap`) | `x`: temporal; `y`: count or aggregated measure | A temporal column spans at least 90 days and has rows on at least 5% of them; one row per entity per day charts the measure, not the count | One row per day of the last `years` (1, 2, 3, 5 or 10) calendar years, counted back from the year of the latest date in the data, not from today |
 | Box plot (`box`) | `x`: category; `y`: measure | A measure, and a category with at least 8 rows per box | Top N categories, at most 50, plus an optional "Other" |
 | Active over time (`intervals`) | `start`, `end`: temporal; `series`: optional category | Two temporal columns are named as a start and an end, such as `start_date` and `end_date` | Number of time buckets times series |
 

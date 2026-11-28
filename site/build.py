@@ -48,7 +48,7 @@ TYPE_LABELS = {
     "scatter": "Scatter plot",
     "map": "Map",
     "stacked_bar": "Stacked bar chart",
-    "calendar": "Calendar heatmap",
+    "calendar_heatmap": "Calendar heatmap",
     "box": "Box plot",
     "intervals": "Active over time",
 }

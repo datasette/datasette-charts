@@ -9,7 +9,7 @@ from .base import (
     CompiledQuery,
 )
 from .box import Box
-from .calendar import Calendar
+from .calendar_heatmap import CalendarHeatmap
 from .histogram import Histogram
 from .intervals import Intervals
 from .line import Line
@@ -24,7 +24,7 @@ BUILTIN_CHART_TYPES = [
     Scatter,
     Map,
     StackedBar,
-    Calendar,
+    CalendarHeatmap,
     Box,
     Intervals,
 ]

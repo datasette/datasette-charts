@@ -169,7 +169,7 @@ def handmade_specs():
         },
         {
             "v": 1,
-            "type": "calendar",
+            "type": "calendar_heatmap",
             "encoding": {"x": {"column": "created_at"}, "y": {"aggregate": "count"}},
         },
         {

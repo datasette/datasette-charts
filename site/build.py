@@ -48,6 +48,9 @@ TYPE_LABELS = {
     "scatter": "Scatter plot",
     "map": "Map",
     "stacked_bar": "Stacked bar chart",
+    "calendar": "Calendar heatmap",
+    "box": "Box plot",
+    "intervals": "Active over time",
 }
 
 
@@ -285,8 +288,16 @@ def docs_from_readme():
     "The README without its title, badges and screenshot, as HTML and a table of contents"
     text = (ROOT / "README.md").read_text()
     intro, rest = text.split("\n## ", 1)
-    summary = [line for line in intro.splitlines() if line and not line.startswith(("#", "[!["))]
-    sections = [s for s in ("## " + rest).split("\n## ") if not s.removeprefix("## ").startswith("Screenshot")]
+    summary = [
+        line
+        for line in intro.splitlines()
+        if line and not line.startswith(("#", "[!["))
+    ]
+    sections = [
+        s
+        for s in ("## " + rest).split("\n## ")
+        if not s.removeprefix("## ").startswith("Screenshot")
+    ]
     body = "\n".join(summary) + "\n\n" + "\n## ".join(sections)
     md = markdown.Markdown(
         extensions=["fenced_code", "tables", "toc", "sane_lists"],
@@ -311,7 +322,10 @@ def fetch_releases():
     "Every GitHub release, newest first. The build fails if GitHub cannot be reached."
     request = urllib.request.Request(
         f"https://api.github.com/repos/{REPO}/releases?per_page=100",
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "datasette-charts-site"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "datasette-charts-site",
+        },
     )
     token = os.environ.get("GITHUB_TOKEN")
     if token:
@@ -321,15 +335,21 @@ def fetch_releases():
             releases = json.load(response)
     except (urllib.error.URLError, TimeoutError) as error:
         # Stop, so that a deploy never replaces the changelog with an empty page
-        sys.exit(f"Could not fetch releases from GitHub: {error}\nUse --offline to build without the changelog.")
+        sys.exit(
+            f"Could not fetch releases from GitHub: {error}\nUse --offline to build without the changelog."
+        )
     releases = [r for r in releases if not r["draft"]]
     releases.sort(key=lambda r: r["published_at"], reverse=True)
     for release in releases:
         body = (release["body"] or "").replace("\r\n", "\n")
         # #4 is an issue or pull request, as it is on GitHub
         body = re.sub(r"(?<![\w&/\[])#(\d+)\b", rf"[#\1]({GITHUB}/issues/\1)", body)
-        release["html"] = markdown.markdown(body, extensions=["fenced_code", "tables", "sane_lists"])
-        published = datetime.datetime.fromisoformat(release["published_at"].replace("Z", "+00:00"))
+        release["html"] = markdown.markdown(
+            body, extensions=["fenced_code", "tables", "sane_lists"]
+        )
+        published = datetime.datetime.fromisoformat(
+            release["published_at"].replace("Z", "+00:00")
+        )
         release["date"] = ordinal_date(published)
         release["date_iso"] = published.date().isoformat()
     return releases
@@ -337,7 +357,11 @@ def fetch_releases():
 
 def ordinal_date(date):
     day = date.day
-    suffix = "th" if 11 <= day % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    suffix = (
+        "th"
+        if 11 <= day % 100 <= 13
+        else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    )
     return f"{day}{suffix} {date:%B %Y}"
 
 
@@ -353,7 +377,10 @@ def build(offline=False):
         if not chart["size"]
     ]
     if missing:
-        print("Missing screenshots (see site/README.md): " + ", ".join(missing), file=sys.stderr)
+        print(
+            "Missing screenshots (see site/README.md): " + ", ".join(missing),
+            file=sys.stderr,
+        )
     docs = docs_from_readme()
     plugins = docs_page("plugins")
     releases = None if offline else fetch_releases()
@@ -399,19 +426,28 @@ def build(offline=False):
         target.parent.mkdir(parents=True, exist_ok=True)
         # Relative links, so the site works at a domain root or under /datasette-charts/
         root = "../" * path.count("/")
-        target.write_text(env.get_template(template).render(root=root, page=template, **context))
+        target.write_text(
+            env.get_template(template).render(root=root, page=template, **context)
+        )
         print(f"Wrote {target.relative_to(ROOT)}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
-    parser.add_argument("command", nargs="?", default="build", choices=["build", "shots"])
-    parser.add_argument("--offline", action="store_true", help="Do not fetch the changelog from GitHub")
+    parser.add_argument(
+        "command", nargs="?", default="build", choices=["build", "shots"]
+    )
+    parser.add_argument(
+        "--offline", action="store_true", help="Do not fetch the changelog from GitHub"
+    )
     args = parser.parse_args()
     if args.command == "shots":
         target = SITE / "shots.yml"
         header = "# Written by: uv run site/build.py shots\n# Do not edit this file. Edit site/gallery.yml instead.\n"
-        target.write_text(header + yaml.safe_dump(shots_config(load_gallery()), sort_keys=False, width=1000))
+        target.write_text(
+            header
+            + yaml.safe_dump(shots_config(load_gallery()), sort_keys=False, width=1000)
+        )
         print(f"Wrote {target.relative_to(ROOT)}")
     else:
         build(offline=args.offline)

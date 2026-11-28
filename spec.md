@@ -767,6 +767,9 @@ Not in scope now (D5). The natural attachment points are re-ranking the determin
 | Scatter / binned heatmap | `x`, `y`: measures | Two measures, ideally correlated or clustered | Raw points under a threshold; otherwise a bin grid |
 | Map | `latitude`, `longitude`; optional `size` | A latitude/longitude pair exists | Raw points under a threshold; otherwise grid cells |
 | Grouped / stacked bar | `x`: category or temporal; `series`: category; `y`: count or aggregated measure | Two categories, or a category over time | Top N by top K series |
+| Calendar heatmap (`calendar`) | `x`: temporal; `y`: count or aggregated measure | A temporal column spans at least 90 days and has rows on at least 5% of them; one row per entity per day charts the measure, not the count | One row per day of the last `years` (1 to 10) years |
+| Box plot (`box`) | `x`: category; `y`: measure | A measure, and a category with at least 8 rows per box | Top N categories, at most 50, plus an optional "Other" |
+| Active over time (`intervals`) | `start`, `end`: temporal; `series`: optional category | Two temporal columns are named as a start and an end, such as `start_date` and `end_date` | Number of time buckets times series |
 
 ### 11.2 SQL patterns
 
@@ -842,6 +845,56 @@ from _chart_source
 join series_rank r on r.s is _chart_source."status"
 group by 1, min(r.rn, :series_limit + 1)
 order by 1, min(r.rn, :series_limit + 1)
+```
+
+**Quartiles** (box plot). SQLite has no percentile function, so each value is numbered within its group and the quartiles are read off by position, interpolated between neighbours as numpy's default and `QUARTILE.INC` do:
+
+```sql
+with _chart_source as (select * from main."plants"),
+_chart_ordered as (
+  select "fuel" as key, "capacity" as v,
+         row_number() over (partition by "fuel" order by "capacity") as i,
+         count(*) over (partition by "fuel") as n
+  from _chart_source
+  where typeof("capacity") in ('integer', 'real')
+)
+select key, min(v) as min,
+  -- the median; q1 and q3 are the same with 0.25 and 0.75
+  max(case when i = cast((n - 1) * 0.5 as integer) + 1 then v end)
+    + max((n - 1) * 0.5 - cast((n - 1) * 0.5 as integer))
+    * (coalesce(max(case when i = cast((n - 1) * 0.5 as integer) + 2 then v end),
+                max(case when i = cast((n - 1) * 0.5 as integer) + 1 then v end))
+       - max(case when i = cast((n - 1) * 0.5 as integer) + 1 then v end)) as median,
+  max(v) as max
+from _chart_ordered
+group by key
+```
+
+The real query keeps the top N groups first, as the bar chart does.
+
+**Rows active over time** (intervals). No row is joined to another: each row adds one at its start bucket and takes one away at its end bucket, and a running total over the buckets gives the count. A row counts from the bucket it starts in up to, but not including, the one it ends in, unless it starts and ends in the same bucket. A row with no end is still active at the end of the chart.
+
+```sql
+with _chart_source as (select * from main."terms"),
+_chart_spans as (
+  select strftime('%Y', "start") as s, strftime('%Y', "end") as e from _chart_source
+  where s is not null and (e is null or e >= s)
+),
+_chart_events as (
+  select s as b, 1 as plus, 0 as minus, coalesce(e = s, 0) as same from _chart_spans
+  union all
+  select e, 0, 1, 0 from _chart_spans where e is not null
+),
+_chart_per_bucket as (
+  select b, sum(plus) as plus, sum(minus) as minus, sum(same) as same
+  from _chart_events group by b
+)
+select b as bucket,
+  sum(plus) over w - sum(minus) over w + same as value,
+  sum(plus) over w - sum(minus) over w as after
+from _chart_per_bucket
+window w as (order by b rows unbounded preceding)
+order by b
 ```
 
 **Downsampling an ordered series** with `ntile`, for a measure plotted against a numeric or sequence axis. Each tile keeps its minimum, maximum and mean, which the renderer draws as a band with a line through it:

@@ -45,14 +45,10 @@ That makes a `datasette-lollipop` directory with the package in `datasette_lolli
 
 ```bash
 cd datasette-lollipop
-uv add datasette-charts
+uv add "datasette-charts>=0.4a0"
 ```
 
-This tutorial needs a version of datasette-charts newer than 0.3a0, which has neither `SOURCE_CTE` nor `ctx.helpers`. Until one is released, install it from GitHub instead:
-
-```bash
-uv add "datasette-charts @ git+https://github.com/datasette/datasette-charts"
-```
+This tutorial needs datasette-charts 0.4a0 or later, the first version with `SOURCE_CTE` and `ctx.helpers`.
 
 ### 2. The chart type
 
@@ -1028,7 +1024,7 @@ Scores are on one scale for every chart type, so that a plugin's suggestions ran
 | 0.3 to 0.6 | Plausible but unremarkable |
 | Under 0.3 | Not worth proposing: it is dropped |
 
-For comparison, on the power plants table the built-in map scores 0.92, the bar chart of rows by fuel 0.74, and the histogram of capacity 0.66. Things that should raise or lower a score: how well the columns' roles fit, null rates, how many values a category has (a handful to a few dozen is best), whether one value dominates, how long a time series is, and column names such as `price` or `id`.
+For comparison, on the power plants table the built-in map scores 0.92, the bar chart of rows by fuel 0.74, the histogram of capacity 0.66, and the box plot of capacity by fuel 0.62. Things that should raise or lower a score: how well the columns' roles fit, null rates, how many values a category has (a handful to a few dozen is best), whether one value dominates, how long a time series is, and column names such as `price` or `id`.
 
 ### How suggestions are ranked
 
@@ -1594,7 +1590,7 @@ The `axes` object:
 | `lookup(annotation)` | Optional. The data point a callout with no `y` points at, as `{x, y}`, with `x` a value on the x scale (a band name, a `Date` or a number), or `null` |
 | `marks(plot)` | Optional. Where the data is drawn, in pixels, as `{rects: [{left, top, right, bottom}], lines: [[{X, Y}, ...]]}`, so that labels can keep off it |
 
-The chart type's [`annotation_types`](#annotation_types), [`annotation_axes`](#annotation_axes), [`annotation_series`](#annotation_series) and [`annotation_lookup`](#annotation_lookup) have to say the same as `axes`. The server checks annotations against them before the renderer sees them. A chart with no x or y axis, such as a map, can take `"text"` notes only, and passes `{}` as `axes`.
+The chart type's [`annotation_types`](#annotation_types), [`annotation_axes`](#annotation_axes), [`annotation_series`](#annotation_series) and [`annotation_lookup`](#annotation_lookup) have to say the same as `axes`. The server checks annotations against them before the renderer sees them. A chart with no straight x or y axis, such as a map or a calendar, can take `"text"` notes only, and passes `{}` as `axes`.
 
 [Step 7 of the tutorial](#7-add-annotations) is a whole example, with `lookup` and `marks`.
 

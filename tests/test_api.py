@@ -34,6 +34,9 @@ async def test_types_json(ds):
         "scatter",
         "map",
         "stacked_bar",
+        "calendar",
+        "box",
+        "intervals",
     ]
     line = data["types"][2]
     assert [c["name"] for c in line["channels"]] == ["x", "y", "series"]

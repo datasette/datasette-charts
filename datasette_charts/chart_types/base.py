@@ -274,3 +274,12 @@ def top_coverage(column, n: int = 3) -> tuple:
     if not top or not column.non_null:
         return 0, 0.0
     return len(top), sum(count for _, count in top) / column.non_null
+
+
+def check_limit(errors: list, spec: dict, channel: str, maximum: int) -> None:
+    "The DSL allows limits up to 100; some charts need a tighter bound"
+    value = (spec.get("encoding") or {}).get(channel)
+    if isinstance(value, dict):
+        limit = value.get("limit")
+        if isinstance(limit, int) and not isinstance(limit, bool) and limit > maximum:
+            errors.append(f"{channel}: limit must be at most {maximum} on this chart")

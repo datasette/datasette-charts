@@ -1590,7 +1590,7 @@ The `axes` object:
 | `lookup(annotation)` | Optional. The data point a callout with no `y` points at, as `{x, y}`, with `x` a value on the x scale (a band name, a `Date` or a number), or `null` |
 | `marks(plot)` | Optional. Where the data is drawn, in pixels, as `{rects: [{left, top, right, bottom}], lines: [[{X, Y}, ...]]}`, so that labels can keep off it |
 
-The chart type's [`annotation_types`](#annotation_types), [`annotation_axes`](#annotation_axes), [`annotation_series`](#annotation_series) and [`annotation_lookup`](#annotation_lookup) have to say the same as `axes`. The server checks annotations against them before the renderer sees them. A chart with no straight x or y axis, such as a map or a calendar, can take `"text"` notes only, and passes `{}` as `axes`.
+The chart type's [`annotation_types`](#annotation_types), [`annotation_axes`](#annotation_axes), [`annotation_series`](#annotation_series) and [`annotation_lookup`](#annotation_lookup) have to say the same as `axes`. The server checks annotations against them before the renderer sees them. A chart with no straight x or y axis, such as a map or a calendar heatmap, can take `"text"` notes only, and passes `{}` as `axes`.
 
 [Step 7 of the tutorial](#7-add-annotations) is a whole example, with `lookup` and `marks`.
 

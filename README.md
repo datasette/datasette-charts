@@ -37,7 +37,7 @@ Charts never fetch every row. Each one compiles to a SQL query that returns a sm
 | `scatter` | Two numeric columns: points for small sources, a binned heatmap for large ones | There are two measures |
 | `map` | Latitude and longitude: points for small sources, grid cells for large ones | A latitude/longitude pair exists |
 | `stacked_bar` | Stacked or grouped bars for two categories, or a category over time | There are two categories |
-| `calendar` | A count or an aggregate for each day, as a calendar with one block per year. The `years` option (1, 2, 3, 5 or 10) picks how many, counted back from the year of the latest date, not from today | A date or timestamp column has rows on many of the days it spans |
+| `calendar_heatmap` | A count or an aggregate for each day, as a calendar with one block per year. The `years` option (1, 2, 3, 5 or 10) picks how many, counted back from the year of the latest date, not from today | A date or timestamp column has rows on many of the days it spans |
 | `box` | Box plots of a numeric column for each of the most common values of a category: minimum, quartiles, median and maximum | There is a measure and a category with enough rows for each value |
 | `intervals` | How many rows are active at each point in time, from a start and an end column, optionally split by a category | Two date columns are named like a start and an end, such as `start_date` and `end_date` |
 
@@ -160,7 +160,7 @@ Annotations are part of the chart's spec, so they are kept in the `#chart=` link
 - Optional styling: `anchor` is where the text sits from what it labels (`top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`); `color` is `blue`, `orange`, `green`, `yellow`, `pink`, `red`, `purple`, `gray` (all following the chart's light or dark palette) or a hex color; lines take `stroke`: `dashed` (the default), `solid` or `dotted`; points take `"marker": false` for text with no dot.
 - Text is at most 200 characters. It wraps to stay inside the plot, and a line break in it starts a new line. A chart takes at most 20 annotations.
 
-Bar, line, histogram, scatter, stacked bar, box and intervals charts take every type. Maps take `text` only, since they have no x or y axis, and so do calendars, whose weeks wrap from one column to the next with no straight time axis to draw on. A chart type from another plugin takes none unless it says which it draws, with `annotation_types`.
+Bar, line, histogram, scatter, stacked bar, box and intervals charts take every type. Maps take `text` only, since they have no x or y axis, and so do calendar heatmaps, whose weeks wrap from one column to the next with no straight time axis to draw on. A chart type from another plugin takes none unless it says which it draws, with `annotation_types`.
 
 Annotations are checked on the server like the rest of the spec, and a mistake comes back as an error naming the annotation, such as `annotations[0]: a line needs x (a vertical line on most charts) or y (a horizontal line), not both`. An annotation at a value the chart does not show, such as a year outside its range, is not drawn, and a note under the chart says so.
 

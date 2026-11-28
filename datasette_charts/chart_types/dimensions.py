@@ -18,7 +18,7 @@ def temporal_dimension(encoding: dict, profile, what: str | None = None) -> dict
 
     Without a timeUnit in the encoding, one is chosen from the column's range.
     ``what`` starts the error message when the column cannot be bucketed,
-    such as "A calendar needs dates".
+    such as "A calendar heatmap needs dates".
     """
     try:
         return _temporal_dimension(encoding, profile)

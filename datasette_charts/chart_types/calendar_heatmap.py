@@ -1,5 +1,5 @@
 """
-calendar: one cell per day, like a contributions calendar. Weeks are
+calendar_heatmap: one cell per day, like a contributions calendar. Weeks are
 columns and weekdays rows, with one block per year. The ``years`` option
 counts back from the year of the latest date in the data, not from today, so
 a table that stopped in 2008 still gets a full calendar.
@@ -76,8 +76,8 @@ def fit_years(temporal) -> str:
     return YEARS[-1]
 
 
-class Calendar(BuiltinChartType):
-    name = "calendar"
+class CalendarHeatmap(BuiltinChartType):
+    name = "calendar_heatmap"
     label = "Calendar heatmap"
     description = (
         "A count or an aggregate for each day, as a calendar with one block per year"
@@ -97,7 +97,7 @@ class Calendar(BuiltinChartType):
         '<rect x="13" y="14" width="4" height="4" opacity=".35"/>'
         '<rect x="18" y="14" width="3" height="4"/></svg>'
     )
-    js_file = "calendar.js"
+    js_file = "calendar_heatmap.js"
     channels = [
         Channel(name="x", label="Day", roles=("temporal",)),
         Channel(
@@ -120,22 +120,6 @@ class Calendar(BuiltinChartType):
     # Weeks wrap from one column to the next, so there is no straight time
     # axis to draw a line, a range or a callout on: free-floating notes only
     annotation_types = ("text",)
-
-    def validate(self, spec, columns) -> list:
-        options = spec.get("options")
-        if isinstance(options, dict) and "layout" in options:
-            # Calendars once had a layout option. Links to the one layout
-            # still drawn keep working.
-            if options["layout"] != "days":
-                return [
-                    "calendar has no layout option any more: leave it out for"
-                    " a calendar of days"
-                ]
-            spec = {
-                **spec,
-                "options": {k: v for k, v in options.items() if k != "layout"},
-            }
-        return super().validate(spec, columns)
 
     def propose(self, profile) -> list:
         categories = [c for c in category_columns(profile) if c.distinct_count]
@@ -238,7 +222,7 @@ class Calendar(BuiltinChartType):
         dimension = temporal_dimension(
             {"column": x["column"], "timeUnit": "day"},
             profile,
-            what="A calendar needs dates",
+            what="A calendar heatmap needs dates",
         )
         where = f" where {dimension['filter']}" if dimension["filter"] else ""
         years = int((spec.get("options") or {}).get("years") or DEFAULT_YEARS)

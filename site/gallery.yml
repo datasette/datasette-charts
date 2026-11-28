@@ -153,11 +153,11 @@ sections:
         table: pypi_releases
         spec: {"v": 1, "type": "stacked_bar", "encoding": {"x": {"column": "upload_time", "timeUnit": "year"}, "series": {"column": "packagetype", "limit": 6, "other": true}, "y": {"aggregate": "count"}}, "options": {"layout": "stacked"}}
 
-  - type: calendar
+  - type: calendar_heatmap
     title: Calendar heatmaps
     text: A count or an aggregate for each day, with one block per year.
     charts:
-      - id: calendar-days
+      - id: calendar-heatmap
         title: Releases per day
         text: >-
           A count of releases for each day of the three years up to the
@@ -166,7 +166,7 @@ sections:
           apart.
         database: content
         table: releases
-        spec: {"v": 1, "type": "calendar", "encoding": {"x": {"column": "published_at"}, "y": {"aggregate": "count"}}, "options": {"years": "3"}}
+        spec: {"v": 1, "type": "calendar_heatmap", "encoding": {"x": {"column": "published_at"}, "y": {"aggregate": "count"}}, "options": {"years": "3"}}
 
   - type: box
     title: Box plots

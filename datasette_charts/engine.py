@@ -30,7 +30,7 @@ TYPE_WEIGHTS = {
     "histogram": 1.0,
     "stacked_bar": 1.0,
     "scatter": 1.0,
-    "calendar": 1.0,
+    "calendar_heatmap": 1.0,
     "box": 1.0,
     "intervals": 1.0,
 }

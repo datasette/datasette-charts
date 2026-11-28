@@ -34,7 +34,7 @@ async def test_types_json(ds):
         "scatter",
         "map",
         "stacked_bar",
-        "calendar",
+        "calendar_heatmap",
         "box",
         "intervals",
     ]

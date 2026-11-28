@@ -1,5 +1,5 @@
 """
-The calendar, box and intervals chart types, against a database of small
+The calendar heatmap, box and intervals chart types, against a database of small
 tables, each built to trigger (or not trigger) one of them. Everything is
 generated from the row number, so it is deterministic.
 """
@@ -15,14 +15,14 @@ import pytest_asyncio
 from datasette.app import Datasette
 
 from datasette_charts import dsl, engine
-from datasette_charts.chart_types.calendar import fit_years
+from datasette_charts.chart_types.calendar_heatmap import fit_years
 from datasette_charts.chart_types.intervals import is_start_end_pair
 from datasette_charts.config import get_config
 from datasette_charts.profiler import profile_source
 from datasette_charts.sources import Source
 from datasette_charts.sqlgen import SpecError
 
-TYPES = ("calendar", "box", "intervals")
+TYPES = ("calendar_heatmap", "box", "intervals")
 KINDS = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
 EVENTS_START = datetime.datetime(2024, 1, 1, 8, 0, 0)
 PACKAGES = ["one", "two", "three"]
@@ -226,8 +226,8 @@ async def test_types_are_registered(ds):
     assert types["box"]["annotations"]["axes"] == {"x": "category", "y": "number"}
     assert types["intervals"]["annotations"]["axes"] == {"x": "time", "y": "number"}
     # No straight time axis: free-floating notes only
-    assert types["calendar"]["annotations"]["types"] == ["text"]
-    assert list(types["calendar"]["options"]) == ["years"]
+    assert types["calendar_heatmap"]["annotations"]["types"] == ["text"]
+    assert list(types["calendar_heatmap"]["options"]) == ["years"]
 
 
 # --- Every suggestion compiles, runs and stays bounded ------------------------------
@@ -268,19 +268,19 @@ async def test_they_do_not_crowd_out_the_others(ds):
     assert sum(1 for t in types if t in TYPES) <= 3
 
 
-# --- calendar ---------------------------------------------------------------------
+# --- calendar heatmap ---------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_calendar_proposals(ds):
-    candidates = await proposed(ds, "events", "calendar")
+    candidates = await proposed(ds, "events", "calendar_heatmap")
     columns = [c.spec["encoding"]["x"]["column"] for c in candidates]
     assert columns == ["created_at", "updated_at"]
     # A second calendar, of a weaker date column, scores well under the first
     assert candidates[1].score <= candidates[0].score - 0.15
     assert candidates[0].spec["options"] == {"years": "1"}
     assert candidates[0].reason == "created_at spans 6 months; one cell per day of 2024"
-    survey = await proposed(ds, "survey", "calendar")
+    survey = await proposed(ds, "survey", "calendar_heatmap")
     assert [c.spec["options"] for c in survey] == [{"years": "3"}]
     assert survey[0].reason == (
         "submitted spans 2 years; one cell per day, 2020 to 2022"
@@ -290,15 +290,15 @@ async def test_calendar_proposals(ds):
 @pytest.mark.asyncio
 async def test_calendar_not_proposed_when_mostly_empty(ds):
     # A term starts once a month: a calendar of days would be almost empty
-    assert await proposed(ds, "terms", "calendar") == []
+    assert await proposed(ds, "terms", "calendar_heatmap") == []
     # A calendar of the most recent years of birthdays shows nothing
-    assert await proposed(ds, "people", "calendar") == []
+    assert await proposed(ds, "people", "calendar_heatmap") == []
 
 
 @pytest.mark.asyncio
 async def test_calendar_of_a_panel_shows_the_measure(ds):
     "One row per package per day: a count is the same every day"
-    candidates = await proposed(ds, "downloads", "calendar")
+    candidates = await proposed(ds, "downloads", "calendar_heatmap")
     assert len(candidates) == 1
     assert candidates[0].spec["encoding"]["y"] == {
         "column": "downloads",
@@ -327,7 +327,7 @@ async def test_calendar_days(ds):
     rows, compiled = await run(
         ds,
         table("events"),
-        spec("calendar", {"years": "5"}, x={"column": "created_at"}),
+        spec("calendar_heatmap", {"years": "5"}, x={"column": "created_at"}),
     )
     expected = collections.Counter(
         moment.date().isoformat() for moment in event_times()
@@ -343,7 +343,7 @@ async def test_calendar_with_a_measure(ds):
         ds,
         table("events"),
         spec(
-            "calendar",
+            "calendar_heatmap",
             x={"column": "created_at"},
             y={"column": "amount", "aggregate": "sum"},
         ),
@@ -358,7 +358,7 @@ async def test_calendar_keeps_only_recent_years(ds):
     rows, _ = await run(
         ds,
         table("terms"),
-        spec("calendar", {"years": "2"}, x={"column": "start_date"}),
+        spec("calendar_heatmap", {"years": "2"}, x={"column": "start_date"}),
     )
     # Terms start from 1990 to 2009: only 2008 and 2009 are shown
     assert {r["day"][:4] for r in rows} == {"2008", "2009"}
@@ -374,43 +374,29 @@ async def test_calendar_years_count_back_from_the_latest_date(ds, years, first):
     rows, _ = await run(
         ds,
         table("terms"),
-        spec("calendar", {"years": years}, x={"column": "start_date"}),
+        spec("calendar_heatmap", {"years": years}, x={"column": "start_date"}),
     )
     assert {int(r["day"][:4]) for r in rows} == set(range(first, 2010))
 
 
 @pytest.mark.asyncio
-async def test_calendar_layout_option(ds):
-    "Calendars once had a layout option: links to the days layout still work"
-    chart = spec(
-        "calendar", {"layout": "days", "years": "2"}, x={"column": "submitted"}
-    )
-    assert await validate(ds, "survey", chart) == []
-    response = await get_data(ds, "survey", chart)
-    assert response.status_code == 200, response.text
-    assert response.json()["rows"]
-    chart["options"]["layout"] = "hour_weekday"
-    assert await validate(ds, "survey", chart) == [
-        "calendar has no layout option any more: leave it out for a calendar of days"
-    ]
-
-
-@pytest.mark.asyncio
 async def test_calendar_needs_dates(ds):
     profile = await profile_source(ds, table("plain"))
-    chart = spec("calendar", x={"column": "name"})
-    with pytest.raises(SpecError, match="^A calendar needs dates: "):
-        engine.get_chart_types(ds)["calendar"].compile(chart, table("plain"), profile)
+    chart = spec("calendar_heatmap", x={"column": "name"})
+    with pytest.raises(SpecError, match="^A calendar heatmap needs dates: "):
+        engine.get_chart_types(ds)["calendar_heatmap"].compile(
+            chart, table("plain"), profile
+        )
 
 
 @pytest.mark.asyncio
 async def test_calendar_annotations(ds):
-    chart = spec("calendar", x={"column": "created_at"})
+    chart = spec("calendar_heatmap", x={"column": "created_at"})
     chart["annotations"] = [{"type": "text", "left": 0.5, "top": 0.1, "text": "Hi"}]
     assert await validate(ds, "events", chart) == []
     chart["annotations"] = [{"type": "line", "x": "2024-03-01", "text": "Launch"}]
     assert await validate(ds, "events", chart) == [
-        "annotations[0]: calendar charts take text annotations, not line"
+        "annotations[0]: calendar_heatmap charts take text annotations, not line"
     ]
 
 
@@ -669,7 +655,7 @@ async def test_intervals_validation_and_bounds(ds):
 @pytest.mark.parametrize(
     "name,chart",
     (
-        ("events", spec("calendar", x={"column": "created_at"})),
+        ("events", spec("calendar_heatmap", x={"column": "created_at"})),
         ("events", spec("box", x={"column": "kind"}, y={"column": "amount"})),
         (
             "spans",
@@ -691,9 +677,11 @@ async def test_data_json(ds, name, chart):
 
 @pytest.mark.asyncio
 async def test_data_json_rejects_bad_specs(ds):
-    response = await get_data(ds, "plain", spec("calendar", x={"column": "name"}))
+    response = await get_data(
+        ds, "plain", spec("calendar_heatmap", x={"column": "name"})
+    )
     assert response.status_code == 400
-    assert "A calendar needs dates" in response.json()["error"]
+    assert "A calendar heatmap needs dates" in response.json()["error"]
     response = await get_data(
         ds, "boxes", spec("box", x={"column": "nope"}, y={"column": "v"})
     )

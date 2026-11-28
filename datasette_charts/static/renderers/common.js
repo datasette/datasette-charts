@@ -152,6 +152,11 @@ export function uniqueNames(names) {
   });
 }
 
+// "1 row", "1,284 rows"
+export function plural(n, noun) {
+  return `${Number(n).toLocaleString("en")} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 export function truncate(text, max) {
   text = String(text);
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
@@ -190,7 +195,7 @@ export function stepDate(date, unit) {
   return next;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function fmtBucket(date, unit) {
   const y = date.getUTCFullYear();

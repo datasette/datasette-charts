@@ -8,13 +8,26 @@ from .base import (
     ChartType,
     CompiledQuery,
 )
+from .box import Box
+from .calendar import Calendar
 from .histogram import Histogram
+from .intervals import Intervals
 from .line import Line
 from .map import Map
 from .scatter import Scatter
 from .stacked_bar import StackedBar
 
-BUILTIN_CHART_TYPES = [Histogram, Bar, Line, Scatter, Map, StackedBar]
+BUILTIN_CHART_TYPES = [
+    Histogram,
+    Bar,
+    Line,
+    Scatter,
+    Map,
+    StackedBar,
+    Calendar,
+    Box,
+    Intervals,
+]
 
 __all__ = [
     "BUILTIN_CHART_TYPES",

@@ -26,6 +26,10 @@ NAMES = [
     "series_rank",
     "profiled",
     "probes",
+    # The calendar, box and intervals charts, from before they were built in
+    "chart_days",
+    "chart_groups",
+    "chart_spans",
 ]
 KINDS = ["alpha", "beta", "gamma"]
 COLORS = ["red", "green", "blue", "gold"]
@@ -47,6 +51,7 @@ def build(path, id_step):
                 id integer primary key,
                 name text,
                 created_at text,
+                ended_at text,
                 kind text,
                 color text,
                 amount real,
@@ -54,12 +59,13 @@ def build(path, id_step):
             )
             """)
         conn.executemany(
-            f'insert into "{name}" values (?, ?, ?, ?, ?, ?, ?)',
+            f'insert into "{name}" values (?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (
                     1 + n * id_step,
                     f"{name} {n}",
                     (start + datetime.timedelta(hours=29 * n)).isoformat(),
+                    (start + datetime.timedelta(hours=29 * n + 300)).isoformat(),
                     KINDS[n % len(KINDS)],
                     COLORS[(n // 2) % len(COLORS)],
                     float((n * 37) % 101),
@@ -161,6 +167,36 @@ def handmade_specs():
             "type": "histogram",
             "encoding": {"x": {"column": "amount"}},
         },
+        {
+            "v": 1,
+            "type": "calendar",
+            "encoding": {"x": {"column": "created_at"}, "y": {"aggregate": "count"}},
+        },
+        {
+            "v": 1,
+            "type": "box",
+            "encoding": {
+                "x": {"column": "ref_id", "limit": 3, "other": True},
+                "y": {"column": "amount"},
+            },
+        },
+        {
+            "v": 1,
+            "type": "intervals",
+            "encoding": {
+                "start": {"column": "created_at", "timeUnit": "week"},
+                "end": {"column": "ended_at"},
+            },
+        },
+        {
+            "v": 1,
+            "type": "intervals",
+            "encoding": {
+                "start": {"column": "created_at", "timeUnit": "week"},
+                "end": {"column": "ended_at"},
+                "series": {"column": "ref_id", "limit": 2, "other": True},
+            },
+        },
     ]
 
 
@@ -196,16 +232,23 @@ async def test_query_reading_a_table_named_like_a_step(ds, name):
 
 
 @pytest.mark.asyncio
-async def test_foreign_key_labels_from_a_table_named_like_a_step(ds):
+@pytest.mark.parametrize(
+    "type_,column", [("bar", "label"), ("box", "label"), ("intervals", "series_label")]
+)
+async def test_foreign_key_labels_from_a_table_named_like_a_step(ds, type_, column):
     "base.ref_id points at grouped, whose labels come from its name column"
-    spec = handmade_specs()[1]
+    spec = [
+        s
+        for s in handmade_specs()
+        if s["type"] == type_ and "ref_id" in json.dumps(s["encoding"])
+    ][0]
     data = await get_json(
         ds,
         "/reserved/-/charts/data.json",
         source=json.dumps({"kind": "table", "table": "base"}),
         spec=json.dumps(spec),
     )
-    label = data["columns"].index("label")
+    label = data["columns"].index(column)
     labels = {row[label] for row in data["rows"] if row[label]}
     assert labels and all(text.startswith("grouped ") for text in labels), data
 

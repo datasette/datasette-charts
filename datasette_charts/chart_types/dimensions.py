@@ -11,13 +11,24 @@ from ..sqlgen import (
 )
 
 
-def temporal_dimension(encoding: dict, profile) -> dict:
+def temporal_dimension(encoding: dict, profile, what: str | None = None) -> dict:
     """
     For a channel with a temporal column, returns the bucketing expression,
     an optional filter, and the time unit and kind that were used.
 
     Without a timeUnit in the encoding, one is chosen from the column's range.
+    ``what`` starts the error message when the column cannot be bucketed,
+    such as "A calendar needs dates".
     """
+    try:
+        return _temporal_dimension(encoding, profile)
+    except SpecError as e:
+        if what:
+            raise SpecError(f"{what}: {e}") from e
+        raise
+
+
+def _temporal_dimension(encoding: dict, profile) -> dict:
     name = encoding["column"]
     column = profile.column(name) if profile else None
     if column is None:

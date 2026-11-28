@@ -345,7 +345,7 @@ def annotation_warnings(spec: dict, data: dict) -> list:
     columns = data["columns"]
     if not annotations or (data.get("meta") or {}).get("timeUnit"):
         return []
-    if spec.get("type") == "bar":
+    if spec.get("type") in ("bar", "box"):
         key, label, is_other = "key", "label", "is_other"
     elif spec.get("type") == "stacked_bar":
         key, label, is_other = "key", "key_label", "key_is_other"
